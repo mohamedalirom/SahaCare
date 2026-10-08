@@ -12,6 +12,12 @@ import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/profil/presentation/screens/profile_screen.dart';
 import '../../features/profil/presentation/screens/edit_profile_screen.dart';
 import '../../features/profil/presentation/screens/medical_records_screen.dart';
+import '../../features/health_tracking/domain/entities/health_measurement.dart';
+import '../../features/health_tracking/presentation/screens/add_measurement_screen.dart';
+import '../../features/health_tracking/presentation/screens/health_dashboard_screen.dart';
+import '../../features/health_tracking/presentation/screens/health_statistics_screen.dart';
+import '../../features/health_tracking/presentation/screens/measurement_detail_screen.dart';
+import '../../features/health_tracking/presentation/screens/measurement_history_screen.dart';
 import '../widgets/home_screen.dart';
 
 /// Configuration principale du routeur avec GoRouter
@@ -118,7 +124,64 @@ final GoRouter appRouter = GoRouter(
     ),
 
     // =========================================================================
+    // Module : Gestion 4 — Suivi de santé (Manel)
+    // =========================================================================
+    GoRoute(
+      path: '/health-tracking',
+      name: 'health-dashboard',
+      builder: (context, state) => const HealthDashboardScreen(),
+      routes: [
+        // Déclarée avant ':type' pour ne pas être capturée par le paramètre
+        GoRoute(
+          path: 'stats',
+          name: 'health-statistics',
+          builder: (context, state) => const HealthStatisticsScreen(),
+        ),
+        GoRoute(
+          path: ':type',
+          name: 'measurement-history',
+          builder: (context, state) => MeasurementHistoryScreen(type: _measurementType(state)),
+          routes: [
+            GoRoute(
+              path: 'add',
+              name: 'measurement-add',
+              builder: (context, state) => AddMeasurementScreen(type: _measurementType(state)),
+            ),
+            GoRoute(
+              path: ':id',
+              name: 'measurement-detail',
+              builder: (context, state) => MeasurementDetailScreen(
+                measurementId: state.pathParameters['id'] ?? '',
+                initialMeasurement: state.extra as HealthMeasurement?,
+              ),
+              routes: [
+                GoRoute(
+                  path: 'edit',
+                  name: 'measurement-edit',
+                  builder: (context, state) => AddMeasurementScreen(
+                    type: _measurementType(state),
+                    initialMeasurement: state.extra as HealthMeasurement? ??
+                        HealthMeasurement.findById(state.pathParameters['id'] ?? ''),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+
+    // =========================================================================
     // // Ajoutez vos routes de module ici (autres modules de l'équipe)
     // =========================================================================
   ],
 );
+
+/// Convertit le paramètre ':type' de l'URL (ex: 'bloodPressure') en [MeasurementType]
+MeasurementType _measurementType(GoRouterState state) {
+  final name = state.pathParameters['type'];
+  return MeasurementType.values.firstWhere(
+    (t) => t.name == name,
+    orElse: () => MeasurementType.weight,
+  );
+}
