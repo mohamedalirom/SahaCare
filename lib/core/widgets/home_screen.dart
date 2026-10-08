@@ -134,6 +134,22 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
+            // Module : Gestion 5 — Documents médicaux et urgence
+            _buildModuleCard(
+              context: context,
+              title: 'Documents & Urgence',
+              subtitle: 'Ordonnances, analyses, rapports, contacts d\'urgence, carte médicale & QR code.',
+              icon: Icons.folder_shared_rounded,
+              iconColor: const Color(0xFF0284C7),
+              badgeText: 'Module Actif',
+              badgeColor: const Color(0xFFDCFCE7),
+              badgeTextColor: const Color(0xFF16A34A),
+              onTap: () {
+                context.push('/documents');
+              },
+            ),
+            const SizedBox(height: 12),
+
             // Modules des autres membres de l'équipe (placeholders)
             _buildModuleCard(
               context: context,

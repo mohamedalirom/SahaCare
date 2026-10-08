@@ -18,6 +18,7 @@ import '../../features/health_tracking/presentation/screens/health_dashboard_scr
 import '../../features/health_tracking/presentation/screens/health_statistics_screen.dart';
 import '../../features/health_tracking/presentation/screens/measurement_detail_screen.dart';
 import '../../features/health_tracking/presentation/screens/measurement_history_screen.dart';
+import '../../features/medical_documents/presentation/screens/home_documents_page.dart';
 import '../widgets/home_screen.dart';
 
 /// Configuration principale du routeur avec GoRouter
@@ -169,6 +170,16 @@ final GoRouter appRouter = GoRouter(
           ],
         ),
       ],
+    ),
+
+    // =========================================================================
+    // Module : Gestion 5 — Documents médicaux et urgence
+    // Navigation interne au module via Navigator.push (MaterialPageRoute)
+    // =========================================================================
+    GoRoute(
+      path: '/documents',
+      name: 'documents-home',
+      builder: (context, state) => const HomeDocumentsPage(),
     ),
 
     // =========================================================================
