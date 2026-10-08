@@ -5,7 +5,7 @@ import 'app.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Point d'entrée de l'application avec ProviderScope pour la gestion d'état Riverpod
+  // Point d'entrée avec ProviderScope pour la gestion d'état
   runApp(
     const ProviderScope(
       child: SahaCareApp(),

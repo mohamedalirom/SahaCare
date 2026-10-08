@@ -14,14 +14,14 @@ class HomeScreen extends StatelessWidget {
         title: const Text('SahaCare'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Carte de Bienvenue
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
@@ -54,49 +54,53 @@ class HomeScreen extends StatelessWidget {
                         child: const Icon(
                           Icons.health_and_safety_rounded,
                           color: Colors.white,
-                          size: 32,
+                          size: 28,
                         ),
                       ),
-                      const SizedBox(width: 14),
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Bonjour Dali 👋',
-                            style: TextStyle(fontSize: 16, color: Colors.white70),
-                          ),
-                          Text(
-                            'Espace Santé Personnel',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Bonjour Dali 👋',
+                              style: TextStyle(fontSize: 14, color: Colors.white70),
                             ),
-                          ),
-                        ],
+                            Text(
+                              'Espace Santé Personnel',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   const Text(
                     'Gérez vos praticiens de santé, prenez vos rendez-vous médicaux et recevez vos alertes de rappel.',
-                    style: TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+                    style: TextStyle(color: Colors.white, fontSize: 12, height: 1.4),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             // Titre de section
             const Text(
               'Modules de l\'Application',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 17,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF0F172A),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
 
             // Module : Gestion 3 — Médecins et rendez-vous (dali)
             _buildModuleCard(
@@ -112,7 +116,7 @@ class HomeScreen extends StatelessWidget {
                 context.push('/appointments');
               },
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
 
             // Modules des autres membres de l'équipe (placeholders)
             _buildModuleCard(
@@ -130,7 +134,7 @@ class HomeScreen extends StatelessWidget {
                 );
               },
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
 
             _buildModuleCard(
               context: context,
@@ -174,18 +178,18 @@ class HomeScreen extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(14.0),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: iconColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: iconColor, size: 28),
+                child: Icon(icon, color: iconColor, size: 24),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,22 +201,22 @@ class HomeScreen extends StatelessWidget {
                           child: Text(
                             title,
                             style: const TextStyle(
-                              fontSize: 15,
+                              fontSize: 14,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF0F172A),
                             ),
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
                             color: badgeColor,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
                             badgeText,
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: FontWeight.w600,
                               color: badgeTextColor,
                             ),
@@ -220,7 +224,7 @@ class HomeScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Text(
                       subtitle,
                       style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.3),
@@ -228,8 +232,8 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8), size: 20),
             ],
           ),
         ),
