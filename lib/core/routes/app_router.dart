@@ -6,16 +6,56 @@ import '../../features/appointments/presentation/screens/appointments_dashboard_
 import '../../features/appointments/presentation/screens/book_appointment_screen.dart';
 import '../../features/appointments/presentation/screens/doctor_detail_screen.dart';
 import '../../features/appointments/presentation/screens/edit_appointment_screen.dart';
+import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/auth/presentation/screens/signup_screen.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
+import '../../features/profil/presentation/screens/profile_screen.dart';
+import '../../features/profil/presentation/screens/edit_profile_screen.dart';
+import '../../features/profil/presentation/screens/medical_records_screen.dart';
 import '../widgets/home_screen.dart';
 
 /// Configuration principale du routeur avec GoRouter
 final GoRouter appRouter = GoRouter(
-  initialLocation: '/',
+  initialLocation: '/login', // Changed to point to the new login screen
   routes: [
     GoRoute(
       path: '/',
       name: 'home',
       builder: (context, state) => const HomeScreen(),
+    ),
+    
+    // Auth Routes
+    GoRoute(
+      path: '/login',
+      name: 'login',
+      builder: (context, state) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: '/signup',
+      name: 'signup',
+      builder: (context, state) => const SignupScreen(),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      name: 'forgot-password',
+      builder: (context, state) => const ForgotPasswordScreen(),
+    ),
+    
+    // Profil Routes
+    GoRoute(
+      path: '/profil',
+      name: 'profil',
+      builder: (context, state) => const ProfileScreen(),
+    ),
+    GoRoute(
+      path: '/edit-profil',
+      name: 'edit-profil',
+      builder: (context, state) => const EditProfileScreen(),
+    ),
+    GoRoute(
+      path: '/medical-records',
+      name: 'medical-records',
+      builder: (context, state) => const MedicalRecordsScreen(),
     ),
 
     // =========================================================================

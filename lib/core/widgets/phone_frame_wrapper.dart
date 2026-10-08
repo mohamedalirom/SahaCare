@@ -34,13 +34,13 @@ class PhoneFrameWrapper extends StatelessWidget {
                   border: Border.all(color: const Color(0xFF334155), width: 6),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.6),
+                      color: Colors.black.withOpacity(0.6),
                       blurRadius: 32,
                       spreadRadius: 4,
                       offset: const Offset(0, 16),
                     ),
                     BoxShadow(
-                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                      color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
                       blurRadius: 40,
                       spreadRadius: 2,
                     ),
