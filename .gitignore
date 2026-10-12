@@ -46,12 +46,12 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+devtools_options.yaml
 
 # Claude Code
 .claude/
 CLAUDE.md
 CLAUDE.local.md
 .mcp.json
-
 # Temporary files
 *.tmp

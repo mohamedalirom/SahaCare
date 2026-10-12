@@ -1,10 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sahacare/app.dart';
+import 'package:sahacare/core/routes/app_router.dart';
 
 void main() {
   testWidgets('Test complet de navigation du module Médecins et Rendez-vous (dali)',
       (WidgetTester tester) async {
+    // Démarrage direct sur l'accueil
+    appRouter.go('/');
+
     // Montage de l'application
     await tester.pumpWidget(
       const ProviderScope(
