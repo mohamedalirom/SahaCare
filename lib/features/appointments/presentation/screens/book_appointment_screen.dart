@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/utils/app_utils.dart';
 import '../../domain/entities/appointment.dart';
 import '../../domain/entities/doctor.dart';
+import '../controllers/appointments_controller.dart';
 
 /// Écran de prise de rendez-vous avec choix de date, créneaux et notifications de rappel
-class BookAppointmentScreen extends StatefulWidget {
+class BookAppointmentScreen extends ConsumerStatefulWidget {
   final Doctor? initialDoctor;
 
   const BookAppointmentScreen({
@@ -14,10 +16,10 @@ class BookAppointmentScreen extends StatefulWidget {
   });
 
   @override
-  State<BookAppointmentScreen> createState() => _BookAppointmentScreenState();
+  ConsumerState<BookAppointmentScreen> createState() => _BookAppointmentScreenState();
 }
 
-class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
+class _BookAppointmentScreenState extends ConsumerState<BookAppointmentScreen> {
   final _formKey = GlobalKey<FormState>();
 
   late Doctor _selectedDoctor;
@@ -61,8 +63,30 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     }
   }
 
-  void _confirmAppointment() {
+  Future<void> _confirmAppointment() async {
     if (_formKey.currentState!.validate()) {
+      final newAppointment = Appointment(
+        id: 'apt-${DateTime.now().millisecondsSinceEpoch}',
+        doctorId: _selectedDoctor.id,
+        doctorName: _selectedDoctor.fullName,
+        doctorSpecialty: _selectedDoctor.specialty,
+        doctorAddress: _selectedDoctor.address,
+        doctorPhone: _selectedDoctor.phone,
+        dateTime: _selectedDate,
+        timeSlot: _selectedSlot,
+        reason: _reasonController.text.trim(),
+        status: AppointmentStatus.upcoming,
+        reminder: _selectedReminder,
+        notificationEnabled: _enableNotification,
+        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+        fee: _selectedDoctor.consultationFee,
+      );
+
+      // Persistance via le Controller Riverpod
+      await ref.read(appointmentsNotifierProvider.notifier).createAppointment(newAppointment);
+
+      if (!mounted) return;
+
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
