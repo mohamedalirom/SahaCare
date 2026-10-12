@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_theme.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show OAuthProvider;
+
 import '../../../../core/widgets/custom_button.dart';
+import '../../services/auth_service.dart';
+import '../providers/auth_providers.dart';
+import '../widgets/auth_header.dart';
+import '../widgets/auth_text_field.dart';
+import '../widgets/social_auth_buttons.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -19,6 +25,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
+  bool _isAppleLoading = false;
 
   @override
   void dispose() {
@@ -29,16 +37,80 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     super.dispose();
   }
 
-  void _signup() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
-      await Future.delayed(const Duration(seconds: 2));
-      setState(() => _isLoading = false);
+  void _showError(Object error) {
+    if (!mounted) return;
+    final message = error is AuthFailure ? error.message : 'Une erreur est survenue: $error';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+  }
+
+  void _showSuccess(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  Future<void> _signup() async {
+    if (_isLoading || _isGoogleLoading || _isAppleLoading) return;
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    final auth = ref.read(authServiceProvider);
+    try {
+      final signedIn = await auth.signUp(
+        fullName: _nameController.text,
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      if (signedIn) {
+        context.go('/profil');
+      } else {
+        // Confirmation par e-mail requise
+        context.pop();
+        _showSuccess('Compte créé avec succès ! Confirmez votre e-mail puis connectez-vous.');
+      }
+    } catch (e) {
+      _showError(e);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _oauth(OAuthProvider provider) async {
+    if (_isLoading || _isGoogleLoading || _isAppleLoading) return;
+    setState(() {
+      if (provider == OAuthProvider.google) {
+        _isGoogleLoading = true;
+      } else {
+        _isAppleLoading = true;
+      }
+    });
+    try {
+      await ref.read(authServiceProvider).signInWithOAuth(provider);
+      if (mounted && ref.read(authServiceProvider).isAuthenticated) {
+        context.go('/profil');
+      }
+    } catch (e) {
+      _showError(e);
+    } finally {
       if (mounted) {
-        context.pop(); // Return to login after signup
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Compte créé avec succès. Veuillez vous connecter.')),
-        );
+        setState(() {
+          _isGoogleLoading = false;
+          _isAppleLoading = false;
+        });
       }
     }
   }
@@ -49,77 +121,71 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       appBar: AppBar(title: const Text('Créer un compte')),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(24),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'Rejoignez SahaCare',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                const AuthHeader(
+                  title: 'Rejoignez SahaCare',
+                  subtitle: 'Créez votre dossier médical en quelques secondes.',
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Remplissez les informations ci-dessous pour créer votre dossier médical.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 32),
-                TextFormField(
+                const SizedBox(height: 28),
+                AuthTextField(
                   controller: _nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Nom complet',
-                    prefixIcon: const Icon(Icons.person_outline),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  validator: (value) =>
-                      (value == null || value.isEmpty) ? 'Veuillez entrer votre nom' : null,
+                  label: 'Nom complet',
+                  icon: Icons.person_outline,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.name],
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Veuillez entrer votre nom' : null,
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
+                AuthTextField(
                   controller: _emailController,
+                  label: 'Email',
+                  icon: Icons.email_outlined,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  validator: (value) =>
-                      (value == null || value.isEmpty || !value.contains('@')) ? 'Email invalide' : null,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.email],
+                  validator: validateEmail,
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
+                AuthTextField(
                   controller: _passwordController,
+                  label: 'Mot de passe',
+                  icon: Icons.lock_outline,
                   obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'Mot de passe',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.newPassword],
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
-                  validator: (value) =>
-                      (value != null && value.length < 6) ? 'Min. 6 caractères' : null,
+                  validator: (v) => (v == null || v.length < 6) ? 'Min. 6 caractères' : null,
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
+                AuthTextField(
                   controller: _confirmPasswordController,
+                  label: 'Confirmer le mot de passe',
+                  icon: Icons.lock_outline,
                   obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'Confirmer le mot de passe',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  validator: (value) =>
-                      (value != _passwordController.text) ? 'Les mots de passe ne correspondent pas' : null,
+                  textInputAction: TextInputAction.done,
+                  validator: (v) => v != _passwordController.text ? 'Les mots de passe ne correspondent pas' : null,
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 28),
                 CustomButton(
                   label: 'S\'inscrire',
-                  onPressed: _signup,
+                  onPressed: (_isGoogleLoading || _isAppleLoading) ? null : _signup,
                   isLoading: _isLoading,
+                ),
+                const SizedBox(height: 24),
+                SocialAuthButtons(
+                  enabled: !_isLoading && !_isGoogleLoading && !_isAppleLoading,
+                  isGoogleLoading: _isGoogleLoading,
+                  isAppleLoading: _isAppleLoading,
+                  onGoogle: () => _oauth(OAuthProvider.google),
+                  onApple: () => _oauth(OAuthProvider.apple),
                 ),
               ],
             ),
