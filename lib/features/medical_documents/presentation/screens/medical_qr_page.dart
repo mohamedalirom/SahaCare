@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../domain/entities/emergency_profile.dart';
+import '../providers/medical_documents_providers.dart';
 
 /// QR code médical d'urgence. Le QR affiché est un motif fictif dessiné localement :
 /// aucune génération réelle de QR code pour le moment.
-class MedicalQrPage extends StatelessWidget {
+class MedicalQrPage extends ConsumerWidget {
   const MedicalQrPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final profile = EmergencyProfile.mock;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(emergencyProfileProvider);
+    final contact = ref.watch(primaryEmergencyContactProvider);
     final primary = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
@@ -107,12 +109,12 @@ class MedicalQrPage extends StatelessWidget {
                   _SharedInfoRow(
                     icon: Icons.warning_amber_rounded,
                     label: 'Allergies',
-                    value: profile.allergies.join(', '),
+                    value: profile.allergies.isEmpty ? 'Aucune' : profile.allergies.join(', '),
                   ),
                   _SharedInfoRow(
                     icon: Icons.phone_in_talk_rounded,
                     label: 'Contact d\'urgence',
-                    value: '${profile.contact.name} · ${profile.contact.phone}',
+                    value: contact == null ? 'Non renseigné' : '${contact.name} · ${contact.phone}',
                     isLast: true,
                   ),
                 ],

@@ -6,8 +6,10 @@ import '../../domain/entities/medical_document.dart';
 /// Carte d'un document médical dans une liste (ordonnance, analyse, rapport)
 class DocumentCard extends StatelessWidget {
   final MedicalDocument document;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
-  const DocumentCard({super.key, required this.document});
+  const DocumentCard({super.key, required this.document, required this.onEdit, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -40,13 +42,36 @@ class DocumentCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             FilledButton.tonalIcon(
-              onPressed: () => showDocumentPreview(context, document),
+              onPressed: () => showDocumentPreview(context, document, onEdit: onEdit, onDelete: onDelete),
               icon: const Icon(Icons.visibility_rounded, size: 18),
               label: const Text('Voir'),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 visualDensity: VisualDensity.compact,
               ),
+            ),
+            PopupMenuButton<VoidCallback>(
+              tooltip: 'Plus d\'actions',
+              icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF64748B)),
+              onSelected: (action) => action(),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: onEdit,
+                  child: const ListTile(
+                    leading: Icon(Icons.edit_rounded),
+                    title: Text('Modifier'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: onDelete,
+                  child: const ListTile(
+                    leading: Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626)),
+                    title: Text('Supprimer', style: TextStyle(color: Color(0xFFDC2626))),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -55,8 +80,13 @@ class DocumentCard extends StatelessWidget {
   }
 }
 
-/// Aperçu (fictif) d'un document dans une feuille du bas
-void showDocumentPreview(BuildContext context, MedicalDocument document) {
+/// Aperçu (fictif) d'un document dans une feuille du bas, avec actions modifier / supprimer
+void showDocumentPreview(
+  BuildContext context,
+  MedicalDocument document, {
+  required VoidCallback onEdit,
+  required VoidCallback onDelete,
+}) {
   final category = document.category;
   final messenger = ScaffoldMessenger.of(context);
 
@@ -145,6 +175,33 @@ void showDocumentPreview(BuildContext context, MedicalDocument document) {
               ),
             ),
             const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      onEdit();
+                    },
+                    icon: const Icon(Icons.edit_rounded, size: 18),
+                    label: const Text('Modifier'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      onDelete();
+                    },
+                    style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: const Text('Supprimer'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(

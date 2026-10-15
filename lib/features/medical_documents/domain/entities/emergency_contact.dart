@@ -1,4 +1,4 @@
-/// Contact à prévenir en cas d'urgence (données fictives)
+/// Contact à prévenir en cas d'urgence
 class EmergencyContact {
   final String id;
   final String name;
@@ -15,6 +15,24 @@ class EmergencyContact {
     this.email,
     this.isPrimary = false,
   });
+
+  EmergencyContact copyWith({
+    String? name,
+    String? relation,
+    String? phone,
+    String? email,
+    bool? isPrimary,
+    bool clearEmail = false,
+  }) {
+    return EmergencyContact(
+      id: id,
+      name: name ?? this.name,
+      relation: relation ?? this.relation,
+      phone: phone ?? this.phone,
+      email: clearEmail ? null : email ?? this.email,
+      isPrimary: isPrimary ?? this.isPrimary,
+    );
+  }
 
   /// Initiales affichées dans l'avatar (ex : "Amira Trabelsi" → "AT")
   String get initials {
