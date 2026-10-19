@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/entities/health_measurement.dart';
+import '../widgets/health_async_view.dart';
 import '../widgets/measurement_tile.dart';
 import '../widgets/measurement_type_picker_sheet.dart';
 import '../widgets/metric_summary_card.dart';
+import '../widgets/health_palette.dart';
 
 /// Écran tableau de bord principal du module : Suivi de santé
 class HealthDashboardScreen extends StatelessWidget {
@@ -19,15 +21,6 @@ class HealthDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final measurements = HealthMeasurement.mockMeasurements;
-    final weekAgo = DateTime.now().subtract(const Duration(days: 7));
-    final thisWeek = measurements.where((m) => m.dateTime.isAfter(weekAgo)).toList();
-    final alerts = MeasurementType.values
-        .map((t) => HealthMeasurement.byType(t).first)
-        .where((m) => m.status != MeasurementStatus.normal)
-        .length;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Suivi de santé'),
@@ -44,87 +37,102 @@ class HealthDashboardScreen extends StatelessWidget {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Nouvelle mesure'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-        children: [
-          // Carte de synthèse
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [theme.colorScheme.primary, theme.colorScheme.secondary],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.25),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Mon aperçu santé',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Suivez l\'évolution de vos mesures au quotidien.',
-                  style: TextStyle(fontSize: 12, color: Colors.white70),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    _SummaryStat(value: '${thisWeek.length}', label: 'Mesures\ncette semaine'),
-                    const SizedBox(width: 10),
-                    _SummaryStat(value: '${MeasurementType.values.length}', label: 'Indicateurs\nsuivis'),
-                    const SizedBox(width: 10),
-                    _SummaryStat(value: '$alerts', label: 'Valeurs hors\nplage'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
+      body: HealthAsyncView(builder: (measurements) => _buildContent(context, measurements)),
+    );
+  }
 
-          _SectionHeader(
-            title: 'Mes indicateurs',
-            actionLabel: 'Graphiques',
-            onAction: () => context.push('/health-tracking/stats'),
-          ),
-          const SizedBox(height: 10),
-          ...MeasurementType.values.map(
-            (type) => MetricSummaryCard(
-              type: type,
-              measurements: HealthMeasurement.byType(type),
-              onTap: () => context.push('/health-tracking/${type.name}'),
-            ),
-          ),
-          const SizedBox(height: 12),
+  Widget _buildContent(BuildContext context, List<HealthMeasurement> measurements) {
+    final theme = Theme.of(context);
+    final weekAgo = DateTime.now().subtract(const Duration(days: 7));
+    final thisWeek = measurements.where((m) => m.dateTime.isAfter(weekAgo)).length;
+    List<HealthMeasurement> ofType(MeasurementType t) => measurements.where((m) => m.type == t).toList();
+    // Dernière valeur de chaque indicateur hors de la plage de référence
+    final alerts = MeasurementType.values
+        .map(ofType)
+        .where((list) => list.isNotEmpty && list.first.status != MeasurementStatus.normal)
+        .length;
 
-          const _SectionHeader(title: 'Dernières mesures'),
-          const SizedBox(height: 10),
-          ...measurements
-              .take(5)
-              .map(
-                (m) => MeasurementTile(
-                  measurement: m,
-                  showType: true,
-                  onTap: () => context.push('/health-tracking/${m.type.name}/${m.id}'),
-                ),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+      children: [
+        // Carte de synthèse
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [theme.colorScheme.primary, theme.colorScheme.secondary],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
-          const SizedBox(height: 12),
-          const Text(
-            'ℹ️ Les plages indiquées sont informatives et ne remplacent pas l\'avis d\'un médecin.',
-            style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), height: 1.4),
+            ],
           ),
-        ],
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Mon aperçu santé',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Suivez l\'évolution de vos mesures au quotidien.',
+                style: TextStyle(fontSize: 12, color: Colors.white70),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _SummaryStat(value: '$thisWeek', label: 'Mesures\ncette semaine'),
+                  const SizedBox(width: 10),
+                  _SummaryStat(value: '${MeasurementType.values.length}', label: 'Indicateurs\nsuivis'),
+                  const SizedBox(width: 10),
+                  _SummaryStat(value: '$alerts', label: 'Valeurs hors\nplage'),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        _SectionHeader(
+          title: 'Mes indicateurs',
+          actionLabel: 'Graphiques',
+          onAction: () => context.push('/health-tracking/stats'),
+        ),
+        const SizedBox(height: 10),
+        ...MeasurementType.values.map(
+          (type) => MetricSummaryCard(
+            type: type,
+            measurements: ofType(type),
+            onTap: () => context.push('/health-tracking/${type.name}'),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        const _SectionHeader(title: 'Dernières mesures'),
+        const SizedBox(height: 10),
+        if (measurements.isEmpty) EmptyMeasurementsMessage(),
+        ...measurements
+            .take(5)
+            .map(
+              (m) => MeasurementTile(
+                measurement: m,
+                showType: true,
+                onTap: () => context.push('/health-tracking/${m.type.name}/${m.id}', extra: m),
+              ),
+            ),
+        const SizedBox(height: 12),
+        const Text(
+          'ℹ️ Les plages indiquées sont informatives et ne remplacent pas l\'avis d\'un médecin.',
+          style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), height: 1.4),
+        ),
+      ],
     );
   }
 }
@@ -172,7 +180,7 @@ class _SectionHeader extends StatelessWidget {
         Expanded(
           child: Text(
             title,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: context.healthText),
             overflow: TextOverflow.ellipsis,
           ),
         ),

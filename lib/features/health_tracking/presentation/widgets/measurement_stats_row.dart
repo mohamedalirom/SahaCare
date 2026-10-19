@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/health_measurement.dart';
+import 'health_palette.dart';
 
 /// Ligne de statistiques : minimum, moyenne, maximum
 class MeasurementStatsRow extends StatelessWidget {
@@ -54,18 +55,18 @@ class _StatBox extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
-          color: highlight ? primary.withValues(alpha: 0.08) : Colors.white,
+          color: highlight ? primary.withValues(alpha: 0.08) : context.healthSurface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: highlight ? primary.withValues(alpha: 0.3) : const Color(0xFFE2E8F0)),
+          border: Border.all(color: highlight ? primary.withValues(alpha: 0.3) : context.healthBorder),
         ),
         child: Column(
           children: [
-            Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
-            const SizedBox(height: 4),
+            Text(label, style: TextStyle(fontSize: 11, color: context.healthTextSecondary)),
+            SizedBox(height: 4),
             FittedBox(
               child: Text(
                 value,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: context.healthText),
               ),
             ),
             Text(unit, style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),

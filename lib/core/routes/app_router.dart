@@ -277,8 +277,8 @@ final GoRouter appRouter = GoRouter(
                           parentNavigatorKey: rootNavigatorKey,
                           builder: (context, state) => AddMeasurementScreen(
                             type: _measurementType(state),
-                            initialMeasurement: state.extra as HealthMeasurement? ??
-                                HealthMeasurement.findById(state.pathParameters['id'] ?? ''),
+                            measurementId: state.pathParameters['id'],
+                            initialMeasurement: state.extra as HealthMeasurement?,
                           ),
                         ),
                       ],
