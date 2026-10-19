@@ -1,24 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/widgets/custom_button.dart';
 import '../../domain/entities/emergency_contact.dart';
+import '../providers/medical_documents_providers.dart';
 import '../widgets/form_widgets.dart';
 
-/// Formulaire d'ajout ou de modification d'un contact d'urgence (interface uniquement)
-class AddEmergencyContactPage extends StatefulWidget {
+/// Formulaire d'ajout ou de modification d'un contact d'urgence
+class AddEmergencyContactPage extends ConsumerStatefulWidget {
   final EmergencyContact? contact; // non null = mode modification
 
   const AddEmergencyContactPage({super.key, this.contact});
 
   @override
-  State<AddEmergencyContactPage> createState() => _AddEmergencyContactPageState();
+  ConsumerState<AddEmergencyContactPage> createState() => _AddEmergencyContactPageState();
 }
 
-class _AddEmergencyContactPageState extends State<AddEmergencyContactPage> {
+class _AddEmergencyContactPageState extends ConsumerState<AddEmergencyContactPage> {
   final _formKey = GlobalKey<FormState>();
+  late final _nameController = TextEditingController(text: widget.contact?.name);
+  late final _phoneController = TextEditingController(text: widget.contact?.phone);
+  late final _emailController = TextEditingController(text: widget.contact?.email);
+  late String? _relation = widget.contact?.relation;
   late bool _isPrimary = widget.contact?.isPrimary ?? false;
 
   bool get _isEdit => widget.contact != null;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
 
   String? _validateEmail(String? value) {
     if (value == null || value.trim().isEmpty) return null; // facultatif
@@ -28,9 +42,30 @@ class _AddEmergencyContactPageState extends State<AddEmergencyContactPage> {
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
+
+    final name = _nameController.text.trim();
+    final phone = _phoneController.text.trim();
+    final email = emptyToNull(_emailController.text);
+    final notifier = ref.read(emergencyContactsProvider.notifier);
+
+    if (_isEdit) {
+      notifier.update(
+        widget.contact!.copyWith(
+          name: name,
+          relation: _relation,
+          phone: phone,
+          email: email,
+          clearEmail: email == null,
+          isPrimary: _isPrimary,
+        ),
+      );
+    } else {
+      notifier.add(name: name, relation: _relation!, phone: phone, email: email, isPrimary: _isPrimary);
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_isEdit ? 'Contact modifié (démo)' : 'Contact ajouté (démo)'),
+        content: Text(_isEdit ? 'Contact modifié' : 'Contact ajouté'),
         backgroundColor: const Color(0xFF16A34A),
       ),
     );
@@ -39,8 +74,6 @@ class _AddEmergencyContactPageState extends State<AddEmergencyContactPage> {
 
   @override
   Widget build(BuildContext context) {
-    final contact = widget.contact;
-
     return Scaffold(
       appBar: AppBar(title: Text(_isEdit ? 'Modifier le contact' : 'Nouveau contact')),
       body: Form(
@@ -50,7 +83,7 @@ class _AddEmergencyContactPageState extends State<AddEmergencyContactPage> {
           children: [
             const FormFieldLabel('Nom complet'),
             TextFormField(
-              initialValue: contact?.name,
+              controller: _nameController,
               textCapitalization: TextCapitalization.words,
               validator: requiredValidator,
               decoration: formInputDecoration(hint: 'Ex : Amira Trabelsi', icon: Icons.person_rounded),
@@ -59,17 +92,17 @@ class _AddEmergencyContactPageState extends State<AddEmergencyContactPage> {
 
             const FormFieldLabel('Relation'),
             DropdownButtonFormField<String>(
-              initialValue: contact?.relation,
+              initialValue: _relation,
               validator: requiredValidator,
               decoration: formInputDecoration(hint: 'Sélectionner une relation', icon: Icons.family_restroom_rounded),
               items: EmergencyContact.relations.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
-              onChanged: (_) {},
+              onChanged: (value) => setState(() => _relation = value),
             ),
             const SizedBox(height: 16),
 
             const FormFieldLabel('Téléphone'),
             TextFormField(
-              initialValue: contact?.phone,
+              controller: _phoneController,
               keyboardType: TextInputType.phone,
               validator: requiredValidator,
               decoration: formInputDecoration(hint: '+216 XX XXX XXX', icon: Icons.phone_rounded),
@@ -78,7 +111,7 @@ class _AddEmergencyContactPageState extends State<AddEmergencyContactPage> {
 
             const FormFieldLabel('Email (facultatif)'),
             TextFormField(
-              initialValue: contact?.email,
+              controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               validator: _validateEmail,
               decoration: formInputDecoration(hint: 'exemple@email.tn', icon: Icons.email_outlined),

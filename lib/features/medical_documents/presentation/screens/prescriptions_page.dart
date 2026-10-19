@@ -4,7 +4,7 @@ import '../../domain/entities/medical_document.dart';
 import '../widgets/document_list_view.dart';
 import 'add_prescription_page.dart';
 
-/// Liste des ordonnances (données fictives)
+/// Liste des ordonnances
 class PrescriptionsPage extends StatelessWidget {
   const PrescriptionsPage({super.key});
 
@@ -15,8 +15,7 @@ class PrescriptionsPage extends StatelessWidget {
       headerTitle: 'Mes ordonnances',
       addTooltip: 'Ajouter une ordonnance',
       category: DocumentCategory.prescription,
-      documents: MedicalDocument.mockPrescriptions,
-      addPage: const AddPrescriptionPage(),
+      formPageBuilder: (document) => AddPrescriptionPage(document: document),
     );
   }
 }

@@ -39,7 +39,7 @@ InputDecoration formInputDecoration({String? hint, IconData? icon}) {
   );
 }
 
-/// Validation visuelle : champ obligatoire
+/// Validation : champ obligatoire
 String? requiredValidator(String? value) {
   if (value == null || value.trim().isEmpty) return 'Champ obligatoire';
   return null;
@@ -48,8 +48,9 @@ String? requiredValidator(String? value) {
 /// Champ de date ouvrant le calendrier Material
 class DatePickerField extends StatefulWidget {
   final DateTime? initialDate;
+  final ValueChanged<DateTime>? onChanged;
 
-  const DatePickerField({super.key, this.initialDate});
+  const DatePickerField({super.key, this.initialDate, this.onChanged});
 
   @override
   State<DatePickerField> createState() => _DatePickerFieldState();
@@ -65,7 +66,10 @@ class _DatePickerFieldState extends State<DatePickerField> {
       firstDate: DateTime(2000),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (picked != null && mounted) setState(() => _date = picked);
+    if (picked != null && mounted) {
+      setState(() => _date = picked);
+      widget.onChanged?.call(picked);
+    }
   }
 
   @override
@@ -88,14 +92,28 @@ class DocumentUploadZone extends StatefulWidget {
   /// Nom de fichier fictif affiché lorsqu'on choisit "Importer un PDF"
   final String demoFileName;
 
-  const DocumentUploadZone({super.key, this.demoFileName = 'document.pdf'});
+  /// Fichier déjà joint (mode modification)
+  final String? initialFileName;
+  final ValueChanged<String?>? onChanged;
+
+  const DocumentUploadZone({
+    super.key,
+    this.demoFileName = 'document.pdf',
+    this.initialFileName,
+    this.onChanged,
+  });
 
   @override
   State<DocumentUploadZone> createState() => _DocumentUploadZoneState();
 }
 
 class _DocumentUploadZoneState extends State<DocumentUploadZone> {
-  String? _fileName;
+  late String? _fileName = widget.initialFileName;
+
+  void _setFileName(String? fileName) {
+    setState(() => _fileName = fileName);
+    widget.onChanged?.call(fileName);
+  }
 
   Future<void> _chooseSource() async {
     final fileName = await showModalBottomSheet<String>(
@@ -130,7 +148,7 @@ class _DocumentUploadZoneState extends State<DocumentUploadZone> {
         ),
       ),
     );
-    if (fileName != null && mounted) setState(() => _fileName = fileName);
+    if (fileName != null && mounted) _setFileName(fileName);
   }
 
   @override
@@ -164,14 +182,17 @@ class _DocumentUploadZoneState extends State<DocumentUploadZone> {
                     style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
                   ),
                   const SizedBox(height: 2),
-                  const Text('Prêt à être ajouté (démo)', style: TextStyle(fontSize: 12, color: Color(0xFF16A34A))),
+                  Text(
+                    _fileName == widget.initialFileName ? 'Fichier joint' : 'Prêt à être ajouté (démo)',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF16A34A)),
+                  ),
                 ],
               ),
             ),
             IconButton(
               tooltip: 'Retirer',
               icon: const Icon(Icons.close_rounded),
-              onPressed: () => setState(() => _fileName = null),
+              onPressed: () => _setFileName(null),
             ),
           ],
         ),
@@ -204,4 +225,10 @@ class _DocumentUploadZoneState extends State<DocumentUploadZone> {
       ),
     );
   }
+}
+
+/// Transforme un texte vide en null (champs facultatifs)
+String? emptyToNull(String value) {
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
 }

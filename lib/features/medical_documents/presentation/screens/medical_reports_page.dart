@@ -4,7 +4,7 @@ import '../../domain/entities/medical_document.dart';
 import '../widgets/document_list_view.dart';
 import 'add_medical_report_page.dart';
 
-/// Liste des rapports médicaux (données fictives)
+/// Liste des rapports médicaux
 class MedicalReportsPage extends StatelessWidget {
   const MedicalReportsPage({super.key});
 
@@ -15,8 +15,7 @@ class MedicalReportsPage extends StatelessWidget {
       headerTitle: 'Mes rapports médicaux',
       addTooltip: 'Ajouter un rapport',
       category: DocumentCategory.report,
-      documents: MedicalDocument.mockReports,
-      addPage: const AddMedicalReportPage(),
+      formPageBuilder: (document) => AddMedicalReportPage(document: document),
     );
   }
 }
