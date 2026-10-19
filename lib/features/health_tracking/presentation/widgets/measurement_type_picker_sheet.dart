@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/health_measurement.dart';
+import 'health_palette.dart';
 
 /// Feuille du bas permettant de choisir le type de mesure à ajouter.
 /// Retourne le [MeasurementType] choisi, ou null si annulé.
@@ -8,7 +9,7 @@ Future<MeasurementType?> showMeasurementTypePicker(BuildContext context) {
   return showModalBottomSheet<MeasurementType>(
     context: context,
     showDragHandle: true,
-    backgroundColor: Colors.white,
+    backgroundColor: context.healthSurface,
     builder: (context) => SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -16,12 +17,15 @@ Future<MeasurementType?> showMeasurementTypePicker(BuildContext context) {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Nouvelle mesure',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.healthText),
             ),
             const SizedBox(height: 4),
-            const Text('Que souhaitez-vous enregistrer ?', style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+            Text(
+              'Que souhaitez-vous enregistrer ?',
+              style: TextStyle(fontSize: 13, color: context.healthTextSecondary),
+            ),
             const SizedBox(height: 12),
             ...MeasurementType.values.map(
               (type) => ListTile(

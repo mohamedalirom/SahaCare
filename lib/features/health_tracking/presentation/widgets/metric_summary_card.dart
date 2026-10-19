@@ -4,6 +4,7 @@ import '../../../../core/utils/app_utils.dart';
 import '../../domain/entities/health_measurement.dart';
 import 'health_line_chart.dart';
 import 'measurement_status_badge.dart';
+import 'health_palette.dart';
 
 /// Carte de synthèse d'un type de mesure : dernière valeur, statut et mini-courbe
 class MetricSummaryCard extends StatelessWidget {
@@ -18,17 +19,17 @@ class MetricSummaryCard extends StatelessWidget {
     final latest = measurements.isNotEmpty ? measurements.first : null;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.only(bottom: 12),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: context.healthBorder),
       ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(14.0),
+          padding: EdgeInsets.all(14.0),
           child: Row(
             children: [
               Expanded(
@@ -50,7 +51,7 @@ class MetricSummaryCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             type.label,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.healthText),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -66,15 +67,15 @@ class MetricSummaryCard extends StatelessWidget {
                         children: [
                           Text(
                             latest?.displayValue ?? '--',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF0F172A),
+                              color: context.healthText,
                               letterSpacing: -0.5,
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Text(type.unit, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                          Text(type.unit, style: TextStyle(fontSize: 12, color: context.healthTextSecondary)),
                         ],
                       ),
                     ),
@@ -96,7 +97,7 @@ class MetricSummaryCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Expanded(
                 flex: 4,
                 child: HealthLineChart(

@@ -1,37 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/app_utils.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../domain/entities/health_measurement.dart';
+import '../controllers/health_tracking_controller.dart';
+import '../widgets/health_palette.dart';
 
 /// Formulaire d'ajout (ou de modification) d'une mesure de santé.
 /// Les champs s'adaptent au type de mesure choisi.
-class AddMeasurementScreen extends StatefulWidget {
+class AddMeasurementScreen extends ConsumerStatefulWidget {
   final MeasurementType type;
-  final HealthMeasurement? initialMeasurement; // non null = mode modification
 
-  const AddMeasurementScreen({super.key, required this.type, this.initialMeasurement});
+  /// Identifiant de la mesure à modifier (null = mode ajout)
+  final String? measurementId;
+  final HealthMeasurement? initialMeasurement;
+
+  const AddMeasurementScreen({super.key, required this.type, this.measurementId, this.initialMeasurement});
 
   @override
-  State<AddMeasurementScreen> createState() => _AddMeasurementScreenState();
+  ConsumerState<AddMeasurementScreen> createState() => _AddMeasurementScreenState();
 }
 
-class _AddMeasurementScreenState extends State<AddMeasurementScreen> {
+class _AddMeasurementScreenState extends ConsumerState<AddMeasurementScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _valueController;
   late final TextEditingController _secondaryController;
   late final TextEditingController _noteController;
   late DateTime _dateTime;
   GlycemiaContext _glycemiaContext = GlycemiaContext.fasting;
+  bool _isSaving = false;
 
-  bool get _isEdit => widget.initialMeasurement != null;
+  /// Mesure en cours de modification (null en mode ajout)
+  HealthMeasurement? _original;
+
+  bool get _isEdit => widget.measurementId != null || widget.initialMeasurement != null;
   MeasurementType get _type => widget.type;
 
   @override
   void initState() {
     super.initState();
-    final m = widget.initialMeasurement;
+    final id = widget.measurementId;
+    _original = (id == null ? null : ref.read(measurementByIdProvider(id))) ?? widget.initialMeasurement;
+    final m = _original;
     _valueController = TextEditingController(text: m?.value.toStringAsFixed(_type.decimals) ?? '');
     _secondaryController = TextEditingController(text: m?.secondaryValue?.round().toString() ?? '');
     _noteController = TextEditingController(text: m?.note ?? '');
@@ -47,9 +59,28 @@ class _AddMeasurementScreenState extends State<AddMeasurementScreen> {
     super.dispose();
   }
 
-  String? _validateNumber(String? value) {
+  static double? _parse(String? value) => double.tryParse((value ?? '').trim().replaceAll(',', '.'));
+
+  /// Validation commune : champ requis, numérique et dans des bornes plausibles
+  String? _validateInBounds(String? value, ValueBounds bounds) {
     if (value == null || value.trim().isEmpty) return 'Champ obligatoire';
-    if (double.tryParse(value.replaceAll(',', '.')) == null) return 'Valeur numérique invalide';
+    final v = _parse(value);
+    if (v == null) return 'Valeur numérique invalide';
+    if (!bounds.contains(v)) {
+      return 'Entre ${_fmt(bounds.min)} et ${_fmt(bounds.max)} ${_type.unit}';
+    }
+    return null;
+  }
+
+  static String _fmt(double v) => v == v.roundToDouble() ? v.round().toString() : v.toString();
+
+  String? _validatePrimary(String? value) => _validateInBounds(value, _type.bounds);
+
+  String? _validateDiastolic(String? value) {
+    final error = _validateInBounds(value, _type.secondaryBounds!);
+    if (error != null) return error;
+    final systolic = _parse(_valueController.text);
+    if (systolic != null && _parse(value)! >= systolic) return 'Doit être inférieure à la systolique';
     return null;
   }
 
@@ -72,20 +103,58 @@ class _AddMeasurementScreenState extends State<AddMeasurementScreen> {
     }
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    // TODO: enregistrement Supabase (phase CRUD)
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isEdit ? 'Mesure modifiée (démo)' : '${_type.label} enregistré(e) (démo)'),
-        backgroundColor: const Color(0xFF16A34A),
-      ),
+    final messenger = ScaffoldMessenger.of(context);
+    if (_dateTime.isAfter(DateTime.now())) {
+      messenger.showSnackBar(const SnackBar(content: Text('La date de la mesure ne peut pas être dans le futur')));
+      return;
+    }
+
+    final isBloodPressure = _type == MeasurementType.bloodPressure;
+    final measurement = HealthMeasurement(
+      id: _original?.id ?? '', // identifiant généré par le contrôleur en mode ajout
+      type: _type,
+      value: double.parse(_parse(_valueController.text)!.toStringAsFixed(_type.decimals)),
+      secondaryValue: isBloodPressure ? _parse(_secondaryController.text)!.roundToDouble() : null,
+      glycemiaContext: _type == MeasurementType.glycemia ? _glycemiaContext : null,
+      dateTime: _dateTime,
+      note: _noteController.text.trim(),
     );
-    context.pop();
+
+    setState(() => _isSaving = true);
+    final notifier = ref.read(healthMeasurementsProvider.notifier);
+    try {
+      if (_isEdit) {
+        await notifier.edit(measurement);
+      } else {
+        await notifier.add(measurement);
+      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            _isEdit ? 'Mesure modifiée' : '${_type.label} enregistré(e) : ${measurement.displayValue} ${_type.unit}',
+          ),
+          backgroundColor: const Color(0xFF16A34A),
+        ),
+      );
+      if (mounted) context.pop();
+    } catch (e) {
+      if (mounted) setState(() => _isSaving = false);
+      messenger.showSnackBar(
+        SnackBar(content: Text("Erreur lors de l'enregistrement : $e"), backgroundColor: const Color(0xFFDC2626)),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isEdit && _original == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Modifier la mesure')),
+        body: const Center(child: Text('Mesure introuvable')),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: Text(_isEdit ? 'Modifier la mesure' : 'Nouvelle mesure')),
       body: Form(
@@ -110,12 +179,12 @@ class _AddMeasurementScreenState extends State<AddMeasurementScreen> {
                       children: [
                         Text(
                           _type.label,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.healthText),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Référence : ${_type.normalRange}',
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                          style: TextStyle(fontSize: 12, color: context.healthTextSecondary),
                         ),
                       ],
                     ),
@@ -174,6 +243,7 @@ class _AddMeasurementScreenState extends State<AddMeasurementScreen> {
             CustomButton(
               label: _isEdit ? 'Enregistrer les modifications' : 'Enregistrer la mesure',
               icon: Icons.check_rounded,
+              isLoading: _isSaving,
               onPressed: _save,
             ),
           ],
@@ -196,7 +266,7 @@ class _AddMeasurementScreenState extends State<AddMeasurementScreen> {
               child: TextFormField(
                 controller: _valueController,
                 keyboardType: keyboard,
-                validator: _validateNumber,
+                validator: _validatePrimary,
                 decoration: _decoration(label: 'Systolique', hint: '120'),
               ),
             ),
@@ -208,7 +278,7 @@ class _AddMeasurementScreenState extends State<AddMeasurementScreen> {
               child: TextFormField(
                 controller: _secondaryController,
                 keyboardType: keyboard,
-                validator: _validateNumber,
+                validator: _validateDiastolic,
                 decoration: _decoration(label: 'Diastolique', hint: '80'),
               ),
             ),
@@ -229,7 +299,7 @@ class _AddMeasurementScreenState extends State<AddMeasurementScreen> {
       TextFormField(
         controller: _valueController,
         keyboardType: keyboard,
-        validator: _validateNumber,
+        validator: _validatePrimary,
         style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         decoration: _decoration(hint: hints[_type], suffix: _type.unit),
       ),
@@ -242,11 +312,11 @@ class _AddMeasurementScreenState extends State<AddMeasurementScreen> {
       hintText: hint,
       suffixText: suffix,
       filled: true,
-      fillColor: Colors.white,
+      fillColor: context.healthSurface,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        borderSide: BorderSide(color: context.healthBorder),
       ),
     );
   }
@@ -261,7 +331,7 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.healthText),
     );
   }
 }
