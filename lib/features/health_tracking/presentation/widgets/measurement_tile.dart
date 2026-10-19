@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/utils/app_utils.dart';
 import '../../domain/entities/health_measurement.dart';
 import 'measurement_status_badge.dart';
+import 'health_palette.dart';
 
 /// Ligne d'historique représentant une mesure
 class MeasurementTile extends StatelessWidget {
@@ -27,7 +28,7 @@ class MeasurementTile extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        side: BorderSide(color: context.healthBorder),
       ),
       child: ListTile(
         onTap: onTap,
@@ -41,10 +42,10 @@ class MeasurementTile extends StatelessWidget {
           showType
               ? '${type.label} · ${measurement.displayValue} ${type.unit}'
               : '${measurement.displayValue} ${type.unit}',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.healthText),
           overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+        subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: context.healthTextSecondary)),
         trailing: MeasurementStatusBadge(status: measurement.status),
       ),
     );

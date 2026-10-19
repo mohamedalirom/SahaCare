@@ -52,7 +52,7 @@ extension DocumentCategoryExt on DocumentCategory {
 }
 
 /// Document médical (ordonnance, analyse ou rapport).
-/// Données fictives uniquement : aucune persistance pour le moment.
+/// Stocké en mémoire (voir medical_documents_providers.dart) : aucune persistance pour le moment.
 class MedicalDocument {
   final String id;
   final DocumentCategory category;
@@ -71,6 +71,27 @@ class MedicalDocument {
     this.note,
     this.fileName,
   });
+
+  /// [clearNote] / [clearFileName] permettent de remettre ces champs facultatifs à null
+  MedicalDocument copyWith({
+    String? title,
+    String? author,
+    DateTime? date,
+    String? note,
+    String? fileName,
+    bool clearNote = false,
+    bool clearFileName = false,
+  }) {
+    return MedicalDocument(
+      id: id,
+      category: category,
+      title: title ?? this.title,
+      author: author ?? this.author,
+      date: date ?? this.date,
+      note: clearNote ? null : note ?? this.note,
+      fileName: clearFileName ? null : fileName ?? this.fileName,
+    );
+  }
 
   static final List<MedicalDocument> mockPrescriptions = [
     MedicalDocument(

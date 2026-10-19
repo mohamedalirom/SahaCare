@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/emergency_contact.dart';
+import '../providers/medical_documents_providers.dart';
 import '../widgets/section_header_card.dart';
 import 'add_emergency_contact_page.dart';
 
-/// Liste des contacts d'urgence (données fictives)
-class EmergencyContactsPage extends StatelessWidget {
+/// Liste des contacts d'urgence
+class EmergencyContactsPage extends ConsumerWidget {
   const EmergencyContactsPage({super.key});
 
   void _openForm(BuildContext context, [EmergencyContact? contact]) {
@@ -16,8 +18,8 @@ class EmergencyContactsPage extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    const contacts = EmergencyContact.mockContacts;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final contacts = ref.watch(emergencyContactsProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Contacts d\'urgence')),
@@ -36,6 +38,15 @@ class EmergencyContactsPage extends StatelessWidget {
             color: Color(0xFF0284C7),
           ),
           const SizedBox(height: 16),
+          if (contacts.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Text(
+                'Aucun contact d\'urgence.\nAjoutez-en un avec le bouton +.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF64748B)),
+              ),
+            ),
           ...contacts.map(
             (c) => _ContactCard(contact: c, onEdit: () => _openForm(context, c)),
           ),
@@ -45,14 +56,13 @@ class EmergencyContactsPage extends StatelessWidget {
   }
 }
 
-class _ContactCard extends StatelessWidget {
+class _ContactCard extends ConsumerWidget {
   final EmergencyContact contact;
   final VoidCallback onEdit;
 
   const _ContactCard({required this.contact, required this.onEdit});
 
-  /// Confirmation de suppression purement visuelle : rien n'est supprimé
-  Future<void> _confirmDelete(BuildContext context) async {
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -69,15 +79,21 @@ class _ContactCard extends StatelessWidget {
         ],
       ),
     );
-    if (confirmed == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Suppression simulée (démo)')),
-      );
-    }
+    if (confirmed != true || !context.mounted) return;
+
+    final notifier = ref.read(emergencyContactsProvider.notifier);
+    final index = ref.read(emergencyContactsProvider).indexWhere((c) => c.id == contact.id);
+    notifier.delete(contact.id);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${contact.name} supprimé(e)'),
+        action: SnackBarAction(label: 'Annuler', onPressed: () => notifier.restore(contact, index)),
+      ),
+    );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const color = Color(0xFF0284C7);
 
     return Card(
@@ -135,6 +151,12 @@ class _ContactCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                if (!contact.isPrimary)
+                  TextButton(
+                    onPressed: () => ref.read(emergencyContactsProvider.notifier).setPrimary(contact.id),
+                    child: const Text('Principal'),
+                  ),
+                const Spacer(),
                 TextButton.icon(
                   onPressed: onEdit,
                   icon: const Icon(Icons.edit_rounded, size: 18),
@@ -142,7 +164,7 @@ class _ContactCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 TextButton.icon(
-                  onPressed: () => _confirmDelete(context),
+                  onPressed: () => _confirmDelete(context, ref),
                   style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   label: const Text('Supprimer'),

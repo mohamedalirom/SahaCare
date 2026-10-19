@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../domain/entities/emergency_contact.dart';
 import '../../domain/entities/medical_document.dart';
+import '../providers/medical_documents_providers.dart';
 import '../widgets/section_header_card.dart';
 import 'analyses_page.dart';
 import 'emergency_contacts_page.dart';
@@ -11,29 +12,33 @@ import 'medical_reports_page.dart';
 import 'prescriptions_page.dart';
 
 /// Écran d'accueil du module : Documents médicaux & Urgence
-class HomeDocumentsPage extends StatelessWidget {
+class HomeDocumentsPage extends ConsumerWidget {
   const HomeDocumentsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    String countLabel(int count, String noun) => '$count $noun${count > 1 ? 's' : ''}';
+    String documentsCount(DocumentCategory category) =>
+        countLabel(ref.watch(documentsByCategoryProvider(category)).length, 'document');
+
     final documentTiles = [
       _ModuleTile(
         title: 'Ordonnances',
-        subtitle: '${MedicalDocument.mockPrescriptions.length} documents',
+        subtitle: documentsCount(DocumentCategory.prescription),
         icon: DocumentCategory.prescription.icon,
         color: DocumentCategory.prescription.color,
         page: const PrescriptionsPage(),
       ),
       _ModuleTile(
         title: 'Analyses',
-        subtitle: '${MedicalDocument.mockAnalyses.length} documents',
+        subtitle: documentsCount(DocumentCategory.analysis),
         icon: DocumentCategory.analysis.icon,
         color: DocumentCategory.analysis.color,
         page: const AnalysesPage(),
       ),
       _ModuleTile(
         title: 'Rapports médicaux',
-        subtitle: '${MedicalDocument.mockReports.length} documents',
+        subtitle: documentsCount(DocumentCategory.report),
         icon: DocumentCategory.report.icon,
         color: DocumentCategory.report.color,
         page: const MedicalReportsPage(),
@@ -43,7 +48,7 @@ class HomeDocumentsPage extends StatelessWidget {
     final emergencyTiles = [
       _ModuleTile(
         title: 'Contacts d\'urgence',
-        subtitle: '${EmergencyContact.mockContacts.length} contacts',
+        subtitle: countLabel(ref.watch(emergencyContactsProvider).length, 'contact'),
         icon: Icons.contact_phone_rounded,
         color: const Color(0xFF0EA5E9),
         page: const EmergencyContactsPage(),
