@@ -1,56 +1,124 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/medication_repository.dart';
+import '../../domain/entities/medication.dart';
+
 class MedicationDetailScreen extends StatefulWidget {
-  const MedicationDetailScreen({super.key});
+  const MedicationDetailScreen({super.key, this.medicationId, this.repository});
+
+  final int? medicationId;
+  final MedicationRepository? repository;
 
   @override
-  State<MedicationDetailScreen> createState() =>
-      _MedicationDetailScreenState();
+  State<MedicationDetailScreen> createState() => _MedicationDetailScreenState();
 }
 
 class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
-  String? selectedStatus;
+  MedicationRepository get _repository =>
+      widget.repository ?? MedicationRepository.instance;
+  late Future<Medication?> _medication;
+  bool _deleting = false;
+  bool _hasChanges = false;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+  void initState() {
+    super.initState();
+    _medication = _loadMedication();
+  }
 
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          'Détail du traitement',
-          style: TextStyle(
-            color: Color(0xFF0F172A),
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        iconTheme: const IconThemeData(
-          color: Color(0xFF0F172A),
-        ),
+  Future<Medication?> _loadMedication() {
+    final id = widget.medicationId;
+    if (id == null) return Future.value(null);
+    return _repository.getById(id);
+  }
 
+  Future<void> _edit() async {
+    final id = widget.medicationId;
+    if (id == null) return;
+    final changed = await context.push<bool>('/medications/edit?id=$id');
+    if (changed == true && mounted) {
+      setState(() {
+        _hasChanges = true;
+        _medication = _loadMedication();
+      });
+    }
+  }
+
+  Future<void> _delete(Medication medication) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer le traitement ?'),
+        content: Text('Voulez-vous supprimer ${medication.name} ?'),
         actions: [
-          IconButton(
-            tooltip: 'Modifier',
-            onPressed: () {
-              context.push('/medications/edit');
-            },
-            icon: const Icon(
-              Icons.edit_outlined,
-              color: Color(0xFF0D9488),
-            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
           ),
-
-          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Supprimer'),
+          ),
         ],
       ),
+    );
+    if (confirmed != true || !mounted) return;
 
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    setState(() => _deleting = true);
+    try {
+      final id = medication.id;
+      if (id == null || await _repository.delete(id) == 0) {
+        throw StateError('Ce médicament a déjà été supprimé.');
+      }
+      if (mounted) context.pop(true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Impossible de supprimer le médicament : $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: const Color(0xFFF8FAFC),
+    appBar: AppBar(
+      leading: IconButton(
+        onPressed: () => context.pop(_hasChanges),
+        icon: const Icon(Icons.arrow_back),
+      ),
+      backgroundColor: Colors.white,
+      elevation: 0,
+      title: const Text(
+        'Détail du traitement',
+        style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold),
+      ),
+      iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
+    ),
+    body: FutureBuilder<Medication?>(
+      future: _medication,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(
+            child: Text('Impossible de charger ce médicament.'),
+          );
+        }
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final medication = snapshot.data;
+        if (medication == null) {
+          return const Center(child: Text('Ce médicament est introuvable.'));
+        }
+
+        return ListView(
+          padding: const EdgeInsets.all(20),
           children: [
             Center(
               child: Container(
@@ -67,388 +135,150 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 15),
-
-            const Center(
+            Center(
               child: Text(
-                'Doliprane',
-                style: TextStyle(
+                medication.name,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF0F172A),
                 ),
               ),
             ),
-
             const SizedBox(height: 6),
-
             const Center(
               child: Text(
-                'Traitement en cours',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Color(0xFF64748B),
-                ),
+                'Détails enregistrés du traitement',
+                style: TextStyle(fontSize: 15, color: Color(0xFF64748B)),
               ),
             ),
-
             const SizedBox(height: 20),
-
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  context.push('/medications/edit');
-                },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF0D9488),
-                  side: const BorderSide(
-                    color: Color(0xFF0D9488),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                icon: const Icon(
-                  Icons.edit_outlined,
-                ),
-                label: const Text(
-                  'Modifier le traitement',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
+            OutlinedButton.icon(
+              onPressed: _edit,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF0D9488),
+                side: const BorderSide(color: Color(0xFF0D9488)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
               ),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text(
+                'Modifier le traitement',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
-
             const SizedBox(height: 25),
-
-            _buildInformationCard(
+            _informationCard(
               icon: Icons.science_outlined,
               title: 'Dosage',
-              value: '500 mg',
+              value: medication.dosage,
             ),
-
             const SizedBox(height: 12),
-
-            _buildInformationCard(
+            _informationCard(
               icon: Icons.access_time,
               title: 'Horaire de prise',
-              value: '08:00',
+              value: medication.time,
             ),
-
             const SizedBox(height: 12),
-
-            _buildInformationCard(
+            _informationCard(
               icon: Icons.calendar_today_outlined,
               title: 'Date de début',
-              value: '08/10/2026',
+              value: _formatDate(medication.startDate),
             ),
-
             const SizedBox(height: 12),
-
-            _buildInformationCard(
+            _informationCard(
               icon: Icons.event_outlined,
               title: 'Date de fin',
-              value: '15/10/2026',
+              value: _formatDate(medication.endDate),
             ),
-
             const SizedBox(height: 12),
-
-            _buildInformationCard(
+            _informationCard(
               icon: Icons.notifications_outlined,
               title: 'Rappel',
-              value: 'Activé',
+              value: medication.reminderEnabled ? 'Activé' : 'Désactivé',
             ),
-
             const SizedBox(height: 30),
-
-            const Text(
-              'Prise du médicament',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            const Text(
-              'Indiquez le statut de cette prise.',
-              style: TextStyle(
-                color: Color(0xFF64748B),
-              ),
-            ),
-
-            const SizedBox(height: 18),
-
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatusButton(
-                    label: 'Pris',
-                    icon: Icons.check_circle_outline,
-                    status: 'Pris',
-                  ),
-                ),
-
-                const SizedBox(width: 8),
-
-                Expanded(
-                  child: _buildStatusButton(
-                    label: 'Reporter',
-                    icon: Icons.schedule,
-                    status: 'Reporté',
-                  ),
-                ),
-
-                const SizedBox(width: 8),
-
-                Expanded(
-                  child: _buildStatusButton(
-                    label: 'Ignorer',
-                    icon: Icons.close,
-                    status: 'Ignoré',
-                  ),
-                ),
-              ],
-            ),
-
-            if (selectedStatus != null) ...[
-              const SizedBox(height: 20),
-
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFECFDF5),
+            OutlinedButton.icon(
+              onPressed: _deleting ? null : () => _delete(medication),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFDC2626),
+                side: const BorderSide(color: Color(0xFFFCA5A5)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: const Color(0xFFA7F3D0),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.info_outline,
-                      color: Color(0xFF0D9488),
-                    ),
-
-                    const SizedBox(width: 10),
-
-                    Expanded(
-                      child: Text(
-                        'Statut enregistré : $selectedStatus',
-                        style: const TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
               ),
-            ],
-
-            const SizedBox(height: 30),
-
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  _showDeleteDialog(context);
-                },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFDC2626),
-                  side: const BorderSide(
-                    color: Color(0xFFFCA5A5),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                icon: const Icon(
-                  Icons.delete_outline,
-                ),
-                label: const Text(
-                  'Supprimer le traitement',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInformationCard({
-    required IconData icon,
-    required String title,
-    required String value,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: const Color(0xFFE2E8F0),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFFCCFBF1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              icon,
-              color: const Color(0xFF0D9488),
-            ),
-          ),
-
-          const SizedBox(width: 14),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-
-                const SizedBox(height: 3),
-
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusButton({
-    required String label,
-    required IconData icon,
-    required String status,
-  }) {
-    final bool selected = selectedStatus == status;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () {
-        setState(() {
-          selectedStatus = status;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          vertical: 14,
-          horizontal: 5,
-        ),
-        decoration: BoxDecoration(
-          color: selected
-              ? const Color(0xFF0D9488)
-              : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected
-                ? const Color(0xFF0D9488)
-                : const Color(0xFFE2E8F0),
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: selected
-                  ? Colors.white
-                  : const Color(0xFF0D9488),
-            ),
-
-            const SizedBox(height: 6),
-
-            Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: selected
-                    ? Colors.white
-                    : const Color(0xFF0F172A),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showDeleteDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text(
-            'Supprimer le traitement ?',
-          ),
-          content: const Text(
-            'Voulez-vous vraiment supprimer Doliprane de vos traitements ?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-              },
-              child: const Text(
-                'Annuler',
-              ),
-            ),
-
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                context.go('/medications');
-              },
-              child: const Text(
-                'Supprimer',
-                style: TextStyle(
-                  color: Color(0xFFDC2626),
-                  fontWeight: FontWeight.bold,
-                ),
+              icon: _deleting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.delete_outline),
+              label: const Text(
+                'Supprimer le traitement',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ],
         );
       },
-    );
-  }
+    ),
+  );
+
+  Widget _informationCard({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: const Color(0xFFE2E8F0)),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xFFCCFBF1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: const Color(0xFF0D9488)),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  String _formatDate(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}/'
+      '${date.month.toString().padLeft(2, '0')}/${date.year}';
 }

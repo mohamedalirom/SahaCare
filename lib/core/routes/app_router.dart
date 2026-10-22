@@ -54,16 +54,17 @@ final shellKey5 = GlobalKey<NavigatorState>(debugLabel: 'shell5');
 final GoRouter appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
   initialLocation: '/profil',
-  
+
   // Se ré-évalue à chaque changement de session (connexion / déconnexion)
   refreshListenable: AuthService.instance,
-  
+
   // Global Session Redirect Guard
   redirect: (context, state) {
     final isAuth = AuthService.instance.isAuthenticated;
-    final isGoingToAuth = state.matchedLocation.startsWith('/login') || 
-                          state.matchedLocation.startsWith('/signup') || 
-                          state.matchedLocation.startsWith('/forgot-password');
+    final isGoingToAuth =
+        state.matchedLocation.startsWith('/login') ||
+        state.matchedLocation.startsWith('/signup') ||
+        state.matchedLocation.startsWith('/forgot-password');
     final isBiometricLock = state.matchedLocation == '/biometric-lock';
 
     if (!isAuth && !isGoingToAuth) {
@@ -162,13 +163,21 @@ final GoRouter appRouter = GoRouter(
                   path: 'detail',
                   name: 'medication-detail',
                   parentNavigatorKey: rootNavigatorKey,
-                  builder: (context, state) => const MedicationDetailScreen(),
+                  builder: (context, state) => MedicationDetailScreen(
+                    medicationId: int.tryParse(
+                      state.uri.queryParameters['id'] ?? '',
+                    ),
+                  ),
                 ),
                 GoRoute(
                   path: 'edit',
                   name: 'medication-edit',
                   parentNavigatorKey: rootNavigatorKey,
-                  builder: (context, state) => const EditMedicationScreen(),
+                  builder: (context, state) => EditMedicationScreen(
+                    medicationId: int.tryParse(
+                      state.uri.queryParameters['id'] ?? '',
+                    ),
+                  ),
                 ),
                 GoRoute(
                   path: 'schedule',
@@ -281,13 +290,15 @@ final GoRouter appRouter = GoRouter(
                   path: ':type',
                   name: 'measurement-history',
                   parentNavigatorKey: rootNavigatorKey,
-                  builder: (context, state) => MeasurementHistoryScreen(type: _measurementType(state)),
+                  builder: (context, state) =>
+                      MeasurementHistoryScreen(type: _measurementType(state)),
                   routes: [
                     GoRoute(
                       path: 'add',
                       name: 'measurement-add',
                       parentNavigatorKey: rootNavigatorKey,
-                      builder: (context, state) => AddMeasurementScreen(type: _measurementType(state)),
+                      builder: (context, state) =>
+                          AddMeasurementScreen(type: _measurementType(state)),
                     ),
                     GoRoute(
                       path: ':id',
@@ -305,7 +316,8 @@ final GoRouter appRouter = GoRouter(
                           builder: (context, state) => AddMeasurementScreen(
                             type: _measurementType(state),
                             measurementId: state.pathParameters['id'],
-                            initialMeasurement: state.extra as HealthMeasurement?,
+                            initialMeasurement:
+                                state.extra as HealthMeasurement?,
                           ),
                         ),
                       ],
@@ -330,7 +342,7 @@ final GoRouter appRouter = GoRouter(
         ),
       ],
     ),
-    
+
     // =========================================================================
     // Outside Shell Routes (e.g. Doctor Details, which might not need bottom nav)
     // =========================================================================
@@ -341,10 +353,7 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) {
         final id = state.pathParameters['id'] ?? '';
         final doctor = state.extra as Doctor?;
-        return DoctorDetailScreen(
-          doctorId: id,
-          initialDoctor: doctor,
-        );
+        return DoctorDetailScreen(doctorId: id, initialDoctor: doctor);
       },
     ),
   ],

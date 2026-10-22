@@ -5,9 +5,10 @@ import '../../data/medication_repository.dart';
 import '../../domain/entities/medication.dart';
 
 class MedicationFormScreen extends StatefulWidget {
-  const MedicationFormScreen({super.key, this.medicationId});
+  const MedicationFormScreen({super.key, this.medicationId, this.repository});
 
   final int? medicationId;
+  final MedicationRepository? repository;
 
   @override
   State<MedicationFormScreen> createState() => _MedicationFormScreenState();
@@ -20,7 +21,8 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
   final _timeController = TextEditingController();
   final _startDateController = TextEditingController();
   final _endDateController = TextEditingController();
-  final _repository = MedicationRepository.instance;
+  MedicationRepository get _repository =>
+      widget.repository ?? MedicationRepository.instance;
 
   bool _reminderEnabled = true;
   bool _loading = false;
@@ -152,7 +154,10 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
           throw StateError('Ce médicament a été supprimé.');
         }
       } else {
-        await _repository.create(medication);
+        final id = await _repository.create(medication);
+        if (id <= 0) {
+          throw StateError('La base n’a pas confirmé l’enregistrement.');
+        }
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -272,37 +277,40 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
+                  Material(
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      side: const BorderSide(color: Color(0xFFE2E8F0)),
                     ),
-                    child: SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Activer les rappels',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF0F172A),
+                    clipBehavior: Clip.antiAlias,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      child: SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Activer les rappels',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF0F172A),
+                          ),
                         ),
+                        subtitle: const Text(
+                          'Recevoir un rappel avant la prise',
+                          style: TextStyle(color: Color(0xFF64748B)),
+                        ),
+                        secondary: const Icon(
+                          Icons.notifications_outlined,
+                          color: Color(0xFF0D9488),
+                        ),
+                        activeThumbColor: const Color(0xFF0D9488),
+                        value: _reminderEnabled,
+                        onChanged: (value) =>
+                            setState(() => _reminderEnabled = value),
                       ),
-                      subtitle: const Text(
-                        'Recevoir un rappel avant la prise',
-                        style: TextStyle(color: Color(0xFF64748B)),
-                      ),
-                      secondary: const Icon(
-                        Icons.notifications_outlined,
-                        color: Color(0xFF0D9488),
-                      ),
-                      activeThumbColor: const Color(0xFF0D9488),
-                      value: _reminderEnabled,
-                      onChanged: (value) =>
-                          setState(() => _reminderEnabled = value),
                     ),
                   ),
                   const SizedBox(height: 30),
@@ -353,9 +361,15 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
     return TextFormField(
       controller: controller,
       decoration: _inputDecoration(label, hint, icon),
-      validator: (value) => value == null || value.trim().isEmpty
-          ? 'Ce champ est obligatoire'
-          : null,
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) {
+          return 'Ce champ est obligatoire';
+        }
+        if (label.startsWith('Date') && _parseDate(value) == null) {
+          return 'Sélectionnez une date valide';
+        }
+        return null;
+      },
     );
   }
 
@@ -376,9 +390,15 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
         icon,
         suffixIcon: Icons.chevron_right,
       ),
-      validator: (value) => value == null || value.trim().isEmpty
-          ? 'Ce champ est obligatoire'
-          : null,
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) {
+          return 'Ce champ est obligatoire';
+        }
+        if (label.startsWith('Date') && _parseDate(value) == null) {
+          return 'Sélectionnez une date valide';
+        }
+        return null;
+      },
     );
   }
 
@@ -419,7 +439,11 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
     final month = int.tryParse(parts[1]);
     final year = int.tryParse(parts[2]);
     if (day == null || month == null || year == null) return null;
-    return DateTime(year, month, day);
+    final date = DateTime(year, month, day);
+    if (date.year != year || date.month != month || date.day != day) {
+      return null;
+    }
+    return date;
   }
 
   String _formatDate(DateTime date) {

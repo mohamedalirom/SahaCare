@@ -2,20 +2,22 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../../core/database/platform_db/db_init.dart';
 import '../domain/entities/medication.dart';
 
 class MedicationRepository {
-  MedicationRepository({DatabaseFactory? databaseFactory, String? databasePath})
-    : _databaseFactoryOverride = databaseFactory,
-      _databasePathOverride = databasePath;
+  MedicationRepository({
+    sqflite.DatabaseFactory? databaseFactory,
+    String? databasePath,
+  }) : _databaseFactoryOverride = databaseFactory,
+       _databasePathOverride = databasePath;
 
   static final MedicationRepository instance = MedicationRepository();
 
-  final DatabaseFactory? _databaseFactoryOverride;
+  final sqflite.DatabaseFactory? _databaseFactoryOverride;
   final String? _databasePathOverride;
-  Database? _database;
+  sqflite.Database? _database;
 
   Future<List<Medication>> getAll() async {
     final rows = await (await _getDatabase()).query(
@@ -64,11 +66,14 @@ class MedicationRepository {
   }
 
   Future<void> close() async {
-    await _database?.close();
+    final database = _database;
     _database = null;
+    if (database != null && database.isOpen) {
+      await database.close();
+    }
   }
 
-  Future<Database> _getDatabase() async {
+  Future<sqflite.Database> _getDatabase() async {
     if (_database != null) {
       return _database!;
     }
@@ -77,7 +82,7 @@ class MedicationRepository {
     final databasePath = _databasePathOverride ?? await _getDatabasePath();
     _database = await factory.openDatabase(
       databasePath,
-      options: OpenDatabaseOptions(
+      options: sqflite.OpenDatabaseOptions(
         version: 1,
         onCreate: (database, version) async {
           await database.execute('''
@@ -97,24 +102,9 @@ class MedicationRepository {
     return _database!;
   }
 
-  DatabaseFactory _platformDatabaseFactory() {
-    if (kIsWeb) {
-      throw UnsupportedError(
-        'Le stockage SQLite des médicaments n’est pas disponible sur le Web.',
-      );
-    }
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.windows:
-      case TargetPlatform.linux:
-      case TargetPlatform.macOS:
-        sqfliteFfiInit();
-        return databaseFactoryFfi;
-      case TargetPlatform.android:
-      case TargetPlatform.iOS:
-      case TargetPlatform.fuchsia:
-        return sqflite.databaseFactory;
-    }
+  sqflite.DatabaseFactory _platformDatabaseFactory() {
+    initPlatformDatabase();
+    return sqflite.databaseFactory;
   }
 
   Future<String> _getDatabasePath() async {
@@ -122,6 +112,11 @@ class MedicationRepository {
       throw StateError(
         'databasePath is required with a custom databaseFactory.',
       );
+    }
+
+    if (kIsWeb) {
+      // sqflite_common_ffi_web stores files in IndexedDB using the database name.
+      return 'sahacare_medications.db';
     }
 
     if (defaultTargetPlatform == TargetPlatform.windows ||
