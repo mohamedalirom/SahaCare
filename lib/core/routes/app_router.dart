@@ -10,6 +10,9 @@ import '../../features/appointments/presentation/screens/appointments_dashboard_
 import '../../features/appointments/presentation/screens/book_appointment_screen.dart';
 import '../../features/appointments/presentation/screens/doctor_detail_screen.dart';
 import '../../features/appointments/presentation/screens/edit_appointment_screen.dart';
+import '../../features/appointments/nearby/presentation/screens/nearby_screen.dart';
+import '../../features/appointments/orientation/presentation/screens/orientation_screen.dart';
+import '../../features/appointments/orientation/presentation/screens/orientation_history_screen.dart';
 
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/signup_screen.dart';
@@ -193,6 +196,30 @@ final GoRouter appRouter = GoRouter(
               name: 'appointments-dashboard',
               builder: (context, state) => const AppointmentsDashboardScreen(),
               routes: [
+                GoRoute(
+                  path: 'nearby',
+                  name: 'appointments-nearby',
+                  parentNavigatorKey: rootNavigatorKey,
+                  builder: (context, state) {
+                    final specialty = state.extra as String?;
+                    return NearbyScreen(initialSpecialty: specialty);
+                  },
+                ),
+                GoRoute(
+                  path: 'orientation',
+                  name: 'appointments-orientation',
+                  parentNavigatorKey: rootNavigatorKey,
+                  builder: (context, state) => const OrientationScreen(),
+                  routes: [
+                    GoRoute(
+                      path: 'history',
+                      name: 'appointments-orientation-history',
+                      parentNavigatorKey: rootNavigatorKey,
+                      builder: (context, state) =>
+                          const OrientationHistoryScreen(),
+                    ),
+                  ],
+                ),
                 GoRoute(
                   path: 'book',
                   name: 'appointment-book',

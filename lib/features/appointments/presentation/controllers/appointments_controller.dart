@@ -7,10 +7,13 @@ import '../../domain/entities/doctor.dart';
 import '../../domain/repositories/appointment_repository.dart';
 import '../../domain/usecases/cancel_appointment_usecase.dart';
 import '../../domain/usecases/create_appointment_usecase.dart';
+import '../../domain/usecases/create_doctor_usecase.dart';
 import '../../domain/usecases/delete_appointment_usecase.dart';
+import '../../domain/usecases/delete_doctor_usecase.dart';
 import '../../domain/usecases/get_appointments_usecase.dart';
 import '../../domain/usecases/get_doctors_usecase.dart';
 import '../../domain/usecases/update_appointment_usecase.dart';
+import '../../domain/usecases/update_doctor_usecase.dart';
 
 // ============================================================================
 // Providers d'infrastructure & Data Sources
@@ -61,6 +64,18 @@ final cancelAppointmentUseCaseProvider = Provider<CancelAppointmentUseCase>((ref
 
 final getDoctorsUseCaseProvider = Provider<GetDoctorsUseCase>((ref) {
   return GetDoctorsUseCase(ref.watch(appointmentRepositoryProvider));
+});
+
+final createDoctorUseCaseProvider = Provider<CreateDoctorUseCase>((ref) {
+  return CreateDoctorUseCase(ref.watch(appointmentRepositoryProvider));
+});
+
+final updateDoctorUseCaseProvider = Provider<UpdateDoctorUseCase>((ref) {
+  return UpdateDoctorUseCase(ref.watch(appointmentRepositoryProvider));
+});
+
+final deleteDoctorUseCaseProvider = Provider<DeleteDoctorUseCase>((ref) {
+  return DeleteDoctorUseCase(ref.watch(appointmentRepositoryProvider));
 });
 
 // ============================================================================
@@ -132,16 +147,12 @@ class AppointmentsState {
 class AppointmentsNotifier extends Notifier<AppointmentsState> {
   @override
   AppointmentsState build() {
-    // Déclenche le chargement asynchrone des données enregistrées en local
     Future.microtask(() => loadData());
     return AppointmentsState();
   }
 
   /// Chargement initial (Read)
   Future<void> loadData() async {
-    if (state.appointments.isEmpty) {
-      state = state.copyWith(isLoading: true, errorMessage: null);
-    }
     try {
       final appointments = await ref.read(getAppointmentsUseCaseProvider).call();
       final doctors = await ref.read(getDoctorsUseCaseProvider).call();
@@ -160,17 +171,21 @@ class AppointmentsNotifier extends Notifier<AppointmentsState> {
     }
   }
 
+  // ==========================================================================
+  // CRUD Rendez-vous
+  // ==========================================================================
+
   /// Créer un rendez-vous (Create)
   Future<bool> createAppointment(Appointment appointment) async {
     try {
       await ref.read(createAppointmentUseCaseProvider).call(appointment);
+      final refreshed = await ref.read(getAppointmentsUseCaseProvider).call();
       if (!ref.mounted) return false;
-      final updatedList = [appointment, ...state.appointments];
-      state = state.copyWith(appointments: updatedList);
+      state = state.copyWith(appointments: refreshed);
       return true;
     } catch (e) {
       if (!ref.mounted) return false;
-      state = state.copyWith(errorMessage: 'Erreur lors de la création : $e');
+      state = state.copyWith(errorMessage: 'Erreur lors de la création du rendez-vous : $e');
       return false;
     }
   }
@@ -179,11 +194,9 @@ class AppointmentsNotifier extends Notifier<AppointmentsState> {
   Future<bool> updateAppointment(Appointment appointment) async {
     try {
       await ref.read(updateAppointmentUseCaseProvider).call(appointment);
+      final refreshed = await ref.read(getAppointmentsUseCaseProvider).call();
       if (!ref.mounted) return false;
-      final updatedList = state.appointments.map((a) {
-        return a.id == appointment.id ? appointment : a;
-      }).toList();
-      state = state.copyWith(appointments: updatedList);
+      state = state.copyWith(appointments: refreshed);
       return true;
     } catch (e) {
       if (!ref.mounted) return false;
@@ -196,18 +209,9 @@ class AppointmentsNotifier extends Notifier<AppointmentsState> {
   Future<bool> cancelAppointment(String id) async {
     try {
       await ref.read(cancelAppointmentUseCaseProvider).call(id);
+      final refreshed = await ref.read(getAppointmentsUseCaseProvider).call();
       if (!ref.mounted) return false;
-      final updatedList = state.appointments.map((a) {
-        if (a.id == id) {
-          return a.copyWith(
-            status: AppointmentStatus.cancelled,
-            reminder: ReminderOption.none,
-            notificationEnabled: false,
-          );
-        }
-        return a;
-      }).toList();
-      state = state.copyWith(appointments: updatedList);
+      state = state.copyWith(appointments: refreshed);
       return true;
     } catch (e) {
       if (!ref.mounted) return false;
@@ -220,9 +224,9 @@ class AppointmentsNotifier extends Notifier<AppointmentsState> {
   Future<bool> deleteAppointment(String id) async {
     try {
       await ref.read(deleteAppointmentUseCaseProvider).call(id);
+      final refreshed = await ref.read(getAppointmentsUseCaseProvider).call();
       if (!ref.mounted) return false;
-      final updatedList = state.appointments.where((a) => a.id != id).toList();
-      state = state.copyWith(appointments: updatedList);
+      state = state.copyWith(appointments: refreshed);
       return true;
     } catch (e) {
       if (!ref.mounted) return false;
@@ -231,24 +235,79 @@ class AppointmentsNotifier extends Notifier<AppointmentsState> {
     }
   }
 
-  /// Filtrer par statut
+  // ==========================================================================
+  // CRUD Médecins
+  // ==========================================================================
+
+  /// Créer un médecin (Create Doctor)
+  Future<bool> createDoctor(Doctor doctor) async {
+    try {
+      await ref.read(createDoctorUseCaseProvider).call(doctor);
+      final refreshed = await ref.read(getDoctorsUseCaseProvider).call();
+      if (!ref.mounted) return false;
+      state = state.copyWith(doctors: refreshed);
+      return true;
+    } catch (e) {
+      if (!ref.mounted) return false;
+      state = state.copyWith(errorMessage: 'Erreur lors de la création du médecin : $e');
+      return false;
+    }
+  }
+
+  /// Mettre à jour un médecin (Update Doctor)
+  Future<bool> updateDoctor(Doctor doctor) async {
+    try {
+      await ref.read(updateDoctorUseCaseProvider).call(doctor);
+      final refreshed = await ref.read(getDoctorsUseCaseProvider).call();
+      if (!ref.mounted) return false;
+      state = state.copyWith(doctors: refreshed);
+      return true;
+    } catch (e) {
+      if (!ref.mounted) return false;
+      state = state.copyWith(errorMessage: 'Erreur lors de la mise à jour du médecin : $e');
+      return false;
+    }
+  }
+
+  /// Supprimer un médecin (Delete Doctor)
+  Future<bool> deleteDoctor(String id) async {
+    try {
+      await ref.read(deleteDoctorUseCaseProvider).call(id);
+      final refreshed = await ref.read(getDoctorsUseCaseProvider).call();
+      if (!ref.mounted) return false;
+      state = state.copyWith(doctors: refreshed);
+      return true;
+    } catch (e) {
+      if (!ref.mounted) return false;
+      state = state.copyWith(errorMessage: e.toString());
+      return false;
+    }
+  }
+
+  /// Vérifie si un médecin a des rendez-vous rattachés
+  Future<bool> doctorHasAppointments(String id) async {
+    return await ref.read(appointmentRepositoryProvider).doctorHasAppointments(id);
+  }
+
+  // ==========================================================================
+  // Filtres
+  // ==========================================================================
+
   void setFilterStatus(AppointmentStatus? status) {
     state = state.copyWith(filterStatus: () => status);
   }
 
-  /// Filtrer par recherche textuelle
   void setSearchQuery(String query) {
     state = state.copyWith(doctorSearchQuery: query);
   }
 
-  /// Filtrer par spécialité
   void setSelectedSpecialty(String specialty) {
     state = state.copyWith(selectedSpecialty: specialty);
   }
 }
 
 // ============================================================================
-// Provider Principal
+// Providers Principaux
 // ============================================================================
 
 final appointmentsNotifierProvider =
@@ -259,6 +318,16 @@ final appointmentByIdProvider = Provider.family<Appointment?, String>((ref, id) 
   final appointments = ref.watch(appointmentsNotifierProvider).appointments;
   try {
     return appointments.firstWhere((a) => a.id == id);
+  } catch (_) {
+    return null;
+  }
+});
+
+/// Provider pour récupérer un médecin spécifique par ID
+final doctorByIdProvider = Provider.family<Doctor?, String>((ref, id) {
+  final doctors = ref.watch(appointmentsNotifierProvider).doctors;
+  try {
+    return doctors.firstWhere((d) => d.id == id);
   } catch (_) {
     return null;
   }

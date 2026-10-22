@@ -392,6 +392,63 @@ class Translations with BaseTranslations<AppLocale, Translations> {
 
 	/// en: 'Unknown date'
 	String get unknownDate => 'Unknown date';
+
+	/// en: 'Nearby Doctors & Clinics'
+	String get nearbyTitle => 'Nearby Doctors & Clinics';
+
+	/// en: 'Search doctor, clinic, specialty...'
+	String get nearbySearchHint => 'Search doctor, clinic, specialty...';
+
+	/// en: 'Radius'
+	String get nearbyRadius => 'Radius';
+
+	/// en: '${name} has been added to your directory!'
+	String nearbySaved({required Object name}) => '${name} has been added to your directory!';
+
+	/// en: '${name} is already in your directory.'
+	String nearbyAlreadySaved({required Object name}) => '${name} is already in your directory.';
+
+	/// en: 'Book Appointment'
+	String get nearbyBookAppointment => 'Book Appointment';
+
+	/// en: '© OpenStreetMap contributors'
+	String get nearbyOsmAttribution => '© OpenStreetMap contributors';
+
+	/// en: 'OpenStreetMap data: please verify information directly with the establishment.'
+	String get nearbyOsmWarning => 'OpenStreetMap data: please verify information directly with the establishment.';
+
+	/// en: 'Medical Orientation'
+	String get orientationTitle => 'Medical Orientation';
+
+	/// en: 'Which specialty should I consult?'
+	String get orientationSubtitle => 'Which specialty should I consult?';
+
+	/// en: 'This suggestion is general guidance, not a diagnosis. It does not replace medical advice. In case of emergency, call 190.'
+	String get orientationDisclaimer => 'This suggestion is general guidance, not a diagnosis. It does not replace medical advice. In case of emergency, call 190.';
+
+	/// en: 'Find the right specialty'
+	String get orientationFindSpecialty => 'Find the right specialty';
+
+	/// en: 'Describe what you feel (pain, location, duration)...'
+	String get orientationSymptomsHint => 'Describe what you feel (pain, location, duration)...';
+
+	/// en: 'Analyzing...'
+	String get orientationAnalyzing => 'Analyzing...';
+
+	/// en: 'Warning: Potential medical emergency'
+	String get orientationEmergencyAlert => 'Warning: Potential medical emergency';
+
+	/// en: 'Call Emergency (190)'
+	String get orientationEmergencyCall => 'Call Emergency (190)';
+
+	/// en: 'Orientation History'
+	String get orientationHistory => 'Orientation History';
+
+	/// en: 'No history recorded'
+	String get orientationNoHistory => 'No history recorded';
+
+	/// en: 'Clear all'
+	String get orientationClearHistory => 'Clear all';
 }
 
 // Path: biologicalSexOptions
@@ -671,6 +728,25 @@ extension on Translations {
 			'saveFailed' => 'Unable to save. Please try again.',
 			'diagnosedIn' => ({required Object date}) => 'Diagnosed in ${date}',
 			'unknownDate' => 'Unknown date',
+			'nearbyTitle' => 'Nearby Doctors & Clinics',
+			'nearbySearchHint' => 'Search doctor, clinic, specialty...',
+			'nearbyRadius' => 'Radius',
+			'nearbySaved' => ({required Object name}) => '${name} has been added to your directory!',
+			'nearbyAlreadySaved' => ({required Object name}) => '${name} is already in your directory.',
+			'nearbyBookAppointment' => 'Book Appointment',
+			'nearbyOsmAttribution' => '© OpenStreetMap contributors',
+			'nearbyOsmWarning' => 'OpenStreetMap data: please verify information directly with the establishment.',
+			'orientationTitle' => 'Medical Orientation',
+			'orientationSubtitle' => 'Which specialty should I consult?',
+			'orientationDisclaimer' => 'This suggestion is general guidance, not a diagnosis. It does not replace medical advice. In case of emergency, call 190.',
+			'orientationFindSpecialty' => 'Find the right specialty',
+			'orientationSymptomsHint' => 'Describe what you feel (pain, location, duration)...',
+			'orientationAnalyzing' => 'Analyzing...',
+			'orientationEmergencyAlert' => 'Warning: Potential medical emergency',
+			'orientationEmergencyCall' => 'Call Emergency (190)',
+			'orientationHistory' => 'Orientation History',
+			'orientationNoHistory' => 'No history recorded',
+			'orientationClearHistory' => 'Clear all',
 			_ => null,
 		};
 	}

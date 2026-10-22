@@ -4,6 +4,7 @@ class AppointmentModel extends Appointment {
   const AppointmentModel({
     required super.id,
     required super.doctorId,
+    super.patientId,
     required super.doctorName,
     required super.doctorSpecialty,
     required super.doctorAddress,
@@ -22,6 +23,7 @@ class AppointmentModel extends Appointment {
     return AppointmentModel(
       id: entity.id,
       doctorId: entity.doctorId,
+      patientId: entity.patientId,
       doctorName: entity.doctorName,
       doctorSpecialty: entity.doctorSpecialty,
       doctorAddress: entity.doctorAddress,
@@ -37,47 +39,63 @@ class AppointmentModel extends Appointment {
     );
   }
 
-  factory AppointmentModel.fromJson(Map<String, dynamic> json) {
+  factory AppointmentModel.fromMap(Map<String, dynamic> map) {
+    final rawDate = map['date_time'] ?? map['dateTime'];
+    final parsedDate = rawDate is DateTime
+        ? rawDate
+        : DateTime.parse(rawDate as String);
+
+    final rawNotif = map['notification_enabled'] ?? map['notificationEnabled'];
+    final notifBool = rawNotif is bool
+        ? rawNotif
+        : (rawNotif is num ? rawNotif != 0 : true);
+
     return AppointmentModel(
-      id: json['id'] as String,
-      doctorId: json['doctorId'] as String,
-      doctorName: json['doctorName'] as String,
-      doctorSpecialty: json['doctorSpecialty'] as String,
-      doctorAddress: json['doctorAddress'] as String,
-      doctorPhone: json['doctorPhone'] as String,
-      dateTime: DateTime.parse(json['dateTime'] as String),
-      timeSlot: json['timeSlot'] as String,
-      reason: json['reason'] as String,
+      id: map['id'] as String,
+      doctorId: (map['doctor_id'] ?? map['doctorId'] ?? '') as String,
+      patientId: (map['patient_id'] ?? map['patientId']) as String?,
+      doctorName: (map['doctor_name'] ?? map['doctorName'] ?? '') as String,
+      doctorSpecialty: (map['doctor_specialty'] ?? map['doctorSpecialty'] ?? '') as String,
+      doctorAddress: (map['doctor_address'] ?? map['doctorAddress'] ?? '') as String,
+      doctorPhone: (map['doctor_phone'] ?? map['doctorPhone'] ?? '') as String,
+      dateTime: parsedDate,
+      timeSlot: (map['time_slot'] ?? map['timeSlot'] ?? '') as String,
+      reason: (map['reason'] ?? '') as String,
       status: AppointmentStatus.values.firstWhere(
-        (e) => e.name == json['status'],
+        (e) => e.name == map['status'],
         orElse: () => AppointmentStatus.upcoming,
       ),
       reminder: ReminderOption.values.firstWhere(
-        (e) => e.name == json['reminder'],
+        (e) => e.name == map['reminder'],
         orElse: () => ReminderOption.oneDayBefore,
       ),
-      notificationEnabled: json['notificationEnabled'] as bool? ?? true,
-      notes: json['notes'] as String?,
-      fee: (json['fee'] as num?)?.toDouble() ?? 60.0,
+      notificationEnabled: notifBool,
+      notes: map['notes'] as String?,
+      fee: (map['fee'] as num?)?.toDouble() ?? 60.0,
     );
   }
 
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'doctorId': doctorId,
-      'doctorName': doctorName,
-      'doctorSpecialty': doctorSpecialty,
-      'doctorAddress': doctorAddress,
-      'doctorPhone': doctorPhone,
-      'dateTime': dateTime.toIso8601String(),
-      'timeSlot': timeSlot,
+      'doctor_id': doctorId,
+      'patient_id': patientId,
+      'doctor_name': doctorName,
+      'doctor_specialty': doctorSpecialty,
+      'doctor_address': doctorAddress,
+      'doctor_phone': doctorPhone,
+      'date_time': dateTime.toIso8601String(),
+      'time_slot': timeSlot,
       'reason': reason,
       'status': status.name,
       'reminder': reminder.name,
-      'notificationEnabled': notificationEnabled,
+      'notification_enabled': notificationEnabled ? 1 : 0,
       'notes': notes,
       'fee': fee,
     };
   }
+
+  factory AppointmentModel.fromJson(Map<String, dynamic> json) => AppointmentModel.fromMap(json);
+
+  Map<String, dynamic> toJson() => toMap();
 }

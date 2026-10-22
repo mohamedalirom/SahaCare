@@ -1,10 +1,12 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
+import '../../../../core/database/database_helper.dart';
 import '../../domain/entities/appointment.dart';
+import '../../domain/entities/doctor.dart';
 import '../models/appointment_model.dart';
+import '../models/doctor_model.dart';
 
 abstract class AppointmentLocalDataSource {
-  Future<List<AppointmentModel>> getAppointments();
+  Future<List<AppointmentModel>> getAppointments({AppointmentStatus? status, String? doctorId});
   Future<AppointmentModel?> getAppointmentById(String id);
   Future<void> saveAppointment(AppointmentModel appointment);
   Future<void> updateAppointment(AppointmentModel appointment);
@@ -13,108 +15,137 @@ abstract class AppointmentLocalDataSource {
 }
 
 class AppointmentLocalDataSourceImpl implements AppointmentLocalDataSource {
-  static const String _storageKey = 'sahacare_appointments_data';
-  final SharedPreferences? prefs;
+  final Database? databaseOverride;
 
-  AppointmentLocalDataSourceImpl({this.prefs});
+  AppointmentLocalDataSourceImpl({this.databaseOverride});
 
-  Future<SharedPreferences> get _instance async {
-    return prefs ?? await SharedPreferences.getInstance();
+  Future<Database> get _db async {
+    if (databaseOverride != null) {
+      return databaseOverride!;
+    }
+    return await DatabaseHelper.instance.database;
+  }
+
+  Future<void> _seedIfEmpty(Database db) async {
+    final count = Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM appointments'),
+        ) ??
+        0;
+
+    if (count == 0) {
+      // Ensure doctors table has all referenced mock doctors first (foreign key integrity)
+      final docBatch = db.batch();
+      for (final doc in Doctor.mockDoctors) {
+        docBatch.insert(
+          'doctors',
+          DoctorModel.fromEntity(doc).toMap(),
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+      await docBatch.commit(noResult: true);
+
+      final batch = db.batch();
+      for (final apt in Appointment.mockAppointments) {
+        batch.insert(
+          'appointments',
+          AppointmentModel.fromEntity(apt).toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await batch.commit(noResult: true);
+    }
   }
 
   @override
-  Future<List<AppointmentModel>> getAppointments() async {
-    final prefs = await _instance;
-    final jsonString = prefs.getString(_storageKey);
+  Future<List<AppointmentModel>> getAppointments({
+    AppointmentStatus? status,
+    String? doctorId,
+  }) async {
+    final db = await _db;
+    await _seedIfEmpty(db);
 
-    if (jsonString == null || jsonString.isEmpty) {
-      // Pré-remplir avec les données initiales mockées pour le premier lancement
-      final initialList = Appointment.mockAppointments
-          .map((a) => AppointmentModel.fromEntity(a))
-          .toList();
-      await _saveList(initialList);
-      return initialList;
+    final whereClauses = <String>[];
+    final whereArgs = <dynamic>[];
+
+    if (status != null) {
+      whereClauses.add('status = ?');
+      whereArgs.add(status.name);
     }
 
-    try {
-      final List<dynamic> decoded = jsonDecode(jsonString) as List<dynamic>;
-      return decoded
-          .map((item) => AppointmentModel.fromJson(item as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      // En cas de corruption, restaurer les données initiales
-      final fallback = Appointment.mockAppointments
-          .map((a) => AppointmentModel.fromEntity(a))
-          .toList();
-      await _saveList(fallback);
-      return fallback;
+    if (doctorId != null) {
+      whereClauses.add('doctor_id = ?');
+      whereArgs.add(doctorId);
     }
+
+    final whereString = whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
+
+    final maps = await db.query(
+      'appointments',
+      where: whereString,
+      whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
+      orderBy: 'date_time ASC',
+    );
+
+    return maps.map((m) => AppointmentModel.fromMap(m)).toList();
   }
 
   @override
   Future<AppointmentModel?> getAppointmentById(String id) async {
-    final list = await getAppointments();
-    try {
-      return list.firstWhere((a) => a.id == id);
-    } catch (_) {
-      return null;
-    }
+    final db = await _db;
+    await _seedIfEmpty(db);
+    final maps = await db.query(
+      'appointments',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return AppointmentModel.fromMap(maps.first);
   }
 
   @override
   Future<void> saveAppointment(AppointmentModel appointment) async {
-    final list = await getAppointments();
-    // Insérer au début de la liste
-    list.insert(0, appointment);
-    await _saveList(list);
+    final db = await _db;
+    await db.insert(
+      'appointments',
+      appointment.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   @override
   Future<void> updateAppointment(AppointmentModel appointment) async {
-    final list = await getAppointments();
-    final index = list.indexWhere((a) => a.id == appointment.id);
-    if (index != -1) {
-      list[index] = appointment;
-      await _saveList(list);
-    }
+    final db = await _db;
+    await db.update(
+      'appointments',
+      appointment.toMap(),
+      where: 'id = ?',
+      whereArgs: [appointment.id],
+    );
   }
 
   @override
   Future<void> deleteAppointment(String id) async {
-    final list = await getAppointments();
-    list.removeWhere((a) => a.id == id);
-    await _saveList(list);
+    final db = await _db;
+    await db.delete(
+      'appointments',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   @override
   Future<void> cancelAppointment(String id) async {
-    final list = await getAppointments();
-    final index = list.indexWhere((a) => a.id == id);
-    if (index != -1) {
-      final current = list[index];
-      list[index] = AppointmentModel(
-        id: current.id,
-        doctorId: current.doctorId,
-        doctorName: current.doctorName,
-        doctorSpecialty: current.doctorSpecialty,
-        doctorAddress: current.doctorAddress,
-        doctorPhone: current.doctorPhone,
-        dateTime: current.dateTime,
-        timeSlot: current.timeSlot,
-        reason: current.reason,
-        status: AppointmentStatus.cancelled,
-        reminder: ReminderOption.none,
-        notificationEnabled: false,
-        notes: current.notes,
-        fee: current.fee,
-      );
-      await _saveList(list);
-    }
-  }
-
-  Future<void> _saveList(List<AppointmentModel> list) async {
-    final prefs = await _instance;
-    final encoded = jsonEncode(list.map((a) => a.toJson()).toList());
-    await prefs.setString(_storageKey, encoded);
+    final db = await _db;
+    await db.update(
+      'appointments',
+      {
+        'status': AppointmentStatus.cancelled.name,
+        'reminder': ReminderOption.none.name,
+        'notification_enabled': 0,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 }
