@@ -4,6 +4,7 @@ import '../../domain/repositories/appointment_repository.dart';
 import '../datasources/appointment_local_datasource.dart';
 import '../datasources/doctor_local_datasource.dart';
 import '../models/appointment_model.dart';
+import '../models/doctor_model.dart';
 
 class AppointmentRepositoryImpl implements AppointmentRepository {
   final AppointmentLocalDataSource appointmentLocalDataSource;
@@ -15,8 +16,8 @@ class AppointmentRepositoryImpl implements AppointmentRepository {
   });
 
   @override
-  Future<List<Appointment>> getAppointments() async {
-    return await appointmentLocalDataSource.getAppointments();
+  Future<List<Appointment>> getAppointments({AppointmentStatus? status, String? doctorId}) async {
+    return await appointmentLocalDataSource.getAppointments(status: status, doctorId: doctorId);
   }
 
   @override
@@ -54,5 +55,27 @@ class AppointmentRepositoryImpl implements AppointmentRepository {
   @override
   Future<Doctor?> getDoctorById(String id) async {
     return await doctorLocalDataSource.getDoctorById(id);
+  }
+
+  @override
+  Future<void> createDoctor(Doctor doctor) async {
+    final model = DoctorModel.fromEntity(doctor);
+    await doctorLocalDataSource.saveDoctor(model);
+  }
+
+  @override
+  Future<void> updateDoctor(Doctor doctor) async {
+    final model = DoctorModel.fromEntity(doctor);
+    await doctorLocalDataSource.updateDoctor(model);
+  }
+
+  @override
+  Future<void> deleteDoctor(String id) async {
+    await doctorLocalDataSource.deleteDoctor(id);
+  }
+
+  @override
+  Future<bool> doctorHasAppointments(String id) async {
+    return await doctorLocalDataSource.doctorHasAppointments(id);
   }
 }

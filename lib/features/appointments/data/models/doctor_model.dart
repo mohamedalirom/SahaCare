@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../../domain/entities/doctor.dart';
 
 class DoctorModel extends Doctor {
@@ -35,41 +36,63 @@ class DoctorModel extends Doctor {
     );
   }
 
-  factory DoctorModel.fromJson(Map<String, dynamic> json) {
+  factory DoctorModel.fromMap(Map<String, dynamic> map) {
+    List<String> parseStringList(dynamic raw, List<String> fallback) {
+      if (raw == null) return fallback;
+      if (raw is List) return raw.map((e) => e.toString()).toList();
+      if (raw is String) {
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is List) return decoded.map((e) => e.toString()).toList();
+        } catch (_) {
+          return raw.split(',').map((e) => e.trim()).toList();
+        }
+      }
+      return fallback;
+    }
+
     return DoctorModel(
-      id: json['id'] as String,
-      fullName: json['fullName'] as String,
-      specialty: json['specialty'] as String,
-      hospitalOrClinic: json['hospitalOrClinic'] as String,
-      address: json['address'] as String,
-      phone: json['phone'] as String,
-      email: json['email'] as String,
-      rating: (json['rating'] as num).toDouble(),
-      reviewsCount: json['reviewsCount'] as int,
-      consultationFee: (json['consultationFee'] as num).toDouble(),
-      bio: json['bio'] as String,
-      availableDays: (json['availableDays'] as List<dynamic>?)?.map((e) => e as String).toList() ??
-          const ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'],
-      availableSlots: (json['availableSlots'] as List<dynamic>?)?.map((e) => e as String).toList() ??
-          const ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'],
+      id: map['id'] as String,
+      fullName: (map['full_name'] ?? map['fullName'] ?? '') as String,
+      specialty: (map['specialty'] ?? '') as String,
+      hospitalOrClinic: (map['hospital_or_clinic'] ?? map['hospitalOrClinic'] ?? '') as String,
+      address: (map['address'] ?? '') as String,
+      phone: (map['phone'] ?? '') as String,
+      email: (map['email'] ?? '') as String,
+      rating: (map['rating'] as num?)?.toDouble() ?? 5.0,
+      reviewsCount: (map['reviews_count'] ?? map['reviewsCount'] as num?)?.toInt() ?? 0,
+      consultationFee: (map['consultation_fee'] ?? map['consultationFee'] as num?)?.toDouble() ?? 60.0,
+      bio: (map['bio'] ?? '') as String,
+      availableDays: parseStringList(
+        map['available_days'] ?? map['availableDays'],
+        const ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'],
+      ),
+      availableSlots: parseStringList(
+        map['available_slots'] ?? map['availableSlots'],
+        const ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'],
+      ),
     );
   }
 
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'fullName': fullName,
+      'full_name': fullName,
       'specialty': specialty,
-      'hospitalOrClinic': hospitalOrClinic,
+      'hospital_or_clinic': hospitalOrClinic,
       'address': address,
       'phone': phone,
       'email': email,
       'rating': rating,
-      'reviewsCount': reviewsCount,
-      'consultationFee': consultationFee,
+      'reviews_count': reviewsCount,
+      'consultation_fee': consultationFee,
       'bio': bio,
-      'availableDays': availableDays,
-      'availableSlots': availableSlots,
+      'available_days': jsonEncode(availableDays),
+      'available_slots': jsonEncode(availableSlots),
     };
   }
+
+  factory DoctorModel.fromJson(Map<String, dynamic> json) => DoctorModel.fromMap(json);
+
+  Map<String, dynamic> toJson() => toMap();
 }

@@ -50,8 +50,10 @@ Avant de lancer le projet, assurez-vous d'avoir installé :
 
 - **`flutter_riverpod`** : Gestion d'état réactive et injection de dépendances.
 - **`go_router`** : Routage déclaratif et navigation.
-- **`dio`** : Client HTTP robuste pour les appels API.
-- **`shared_preferences`** : Stockage local clé/valeur pour les préférences utilisateur et tokens.
+- **`dio` / `http`** : Clients HTTP pour les appels API (Overpass OSM, backends).
+- **`flutter_map` & `latlong2`** : Cartographie interactive OpenStreetMap.
+- **`geolocator`** : Géolocalisation GPS en temps réel.
+- **`shared_preferences` & `sqflite`** : Stockage local clé/valeur et base de données relationnelle locale.
 - **`intl`** : Internationalisation et formatage des dates/heures.
 
 ---
@@ -105,3 +107,10 @@ GoRoute(
   builder: (context, state) => const VotreScreen(),
 ),
 ```
+
+---
+
+## 📚 Documentation des modules
+
+- **Module Rendez-vous & Médecins** : voir la documentation complète dans [lib/features/appointments/README.md](file:///c:/Users/dali/Desktop/SahaCare/sahacare/lib/features/appointments/README.md) incluant la fonctionnalité **Médecins & Cliniques à proximité (OpenStreetMap / Overpass)**.
+

@@ -55,3 +55,7 @@ CLAUDE.local.md
 .mcp.json
 # Temporary files
 *.tmp
+
+# Environment variables & API keys
+.env
+

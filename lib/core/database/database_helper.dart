@@ -23,11 +23,16 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 5,
+      onConfigure: _onConfigureDB,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onOpen: _onOpenDB,
     );
+  }
+
+  Future<void> _onConfigureDB(Database db) async {
+    await db.execute('PRAGMA foreign_keys = ON');
   }
 
   Future<void> _onOpenDB(Database db) async {
@@ -100,6 +105,12 @@ class DatabaseHelper {
         created_at INTEGER NOT NULL
       )
     ''');
+
+    // 5. Appointments & Doctors Tables
+    await createAppointmentsTables(db);
+
+    // 6. Specialties & Orientation History Tables
+    await createOrientationTables(db);
   }
 
   Future<void> _createMedicalHistoryTable(Database db) async {
@@ -115,6 +126,50 @@ class DatabaseHelper {
     ''');
   }
 
+  static Future<void> createAppointmentsTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS doctors (
+        id TEXT PRIMARY KEY,
+        full_name TEXT NOT NULL,
+        specialty TEXT NOT NULL,
+        hospital_or_clinic TEXT NOT NULL,
+        address TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        email TEXT NOT NULL,
+        rating REAL NOT NULL DEFAULT 5.0,
+        reviews_count INTEGER NOT NULL DEFAULT 0,
+        consultation_fee REAL NOT NULL DEFAULT 60.0,
+        bio TEXT NOT NULL DEFAULT '',
+        available_days TEXT NOT NULL,
+        available_slots TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS appointments (
+        id TEXT PRIMARY KEY,
+        doctor_id TEXT NOT NULL,
+        patient_id TEXT,
+        doctor_name TEXT NOT NULL,
+        doctor_specialty TEXT NOT NULL,
+        doctor_address TEXT NOT NULL,
+        doctor_phone TEXT NOT NULL,
+        date_time TEXT NOT NULL,
+        time_slot TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        status TEXT NOT NULL,
+        reminder TEXT NOT NULL,
+        notification_enabled INTEGER NOT NULL DEFAULT 1,
+        notes TEXT,
+        fee REAL NOT NULL DEFAULT 60.0,
+        FOREIGN KEY (doctor_id) REFERENCES doctors (id) ON DELETE RESTRICT
+      )
+    ''');
+
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments (date_time ASC)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_doctor ON appointments (doctor_id)');
+  }
+
   Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE allergies ADD COLUMN kind TEXT');
@@ -125,6 +180,69 @@ class DatabaseHelper {
       try {
         await db.execute('ALTER TABLE profiles ADD COLUMN is_visible_to_doctors INTEGER NOT NULL DEFAULT 1');
       } catch (_) {}
+    }
+    if (oldVersion < 4) {
+      await createAppointmentsTables(db);
+    }
+    if (oldVersion < 5) {
+      await createOrientationTables(db);
+    }
+  }
+
+  static Future<void> createOrientationTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS specialties (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        icon_name TEXT NOT NULL,
+        doctors_count INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS orientation_history (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL,
+        text TEXT NOT NULL,
+        suggested_specialties TEXT NOT NULL,
+        urgency TEXT NOT NULL,
+        advice TEXT NOT NULL
+      )
+    ''');
+
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM specialties'),
+    ) ?? 0;
+
+    if (count == 0) {
+      final batch = db.batch();
+      final defaultSpecialties = [
+        {'id': 'general', 'name': 'Médecine Générale', 'icon_name': 'medical_services'},
+        {'id': 'cardio', 'name': 'Cardiologie', 'icon_name': 'favorite'},
+        {'id': 'derma', 'name': 'Dermatologie', 'icon_name': 'clean_hands'},
+        {'id': 'pediatry', 'name': 'Pédiatrie', 'icon_name': 'child_care'},
+        {'id': 'ophtalmo', 'name': 'Ophtalmologie', 'icon_name': 'visibility'},
+        {'id': 'dentist', 'name': 'Dentiste', 'icon_name': 'mood'},
+        {'id': 'gyneco', 'name': 'Gynécologie', 'icon_name': 'pregnant_woman'},
+        {'id': 'neuro', 'name': 'Neurologie', 'icon_name': 'psychology'},
+        {'id': 'ortho', 'name': 'Orthopédie', 'icon_name': 'accessibility_new'},
+        {'id': 'psychiatry', 'name': 'Psychiatrie', 'icon_name': 'self_improvement'},
+        {'id': 'orl', 'name': 'ORL', 'icon_name': 'hearing'},
+        {'id': 'pneumo', 'name': 'Pneumologie', 'icon_name': 'air'},
+        {'id': 'gastro', 'name': 'Gastro-entérologie', 'icon_name': 'restaurant'},
+        {'id': 'uro', 'name': 'Urologie', 'icon_name': 'water_drop'},
+        {'id': 'endocrino', 'name': 'Endocrinologie', 'icon_name': 'medication'},
+      ];
+
+      for (final s in defaultSpecialties) {
+        batch.insert('specialties', {
+          'id': s['id']!,
+          'name': s['name']!,
+          'icon_name': s['icon_name']!,
+          'doctors_count': 0,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      await batch.commit(noResult: true);
     }
   }
 

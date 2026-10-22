@@ -3,8 +3,8 @@ import '../entities/doctor.dart';
 
 /// Contrat du repository pour la gestion des rendez-vous et des médecins
 abstract class AppointmentRepository {
-  /// Récupère la liste de tous les rendez-vous
-  Future<List<Appointment>> getAppointments();
+  /// Récupère la liste de tous les rendez-vous (avec filtres optionnels)
+  Future<List<Appointment>> getAppointments({AppointmentStatus? status, String? doctorId});
 
   /// Récupère un rendez-vous par son identifiant unique
   Future<Appointment?> getAppointmentById(String id);
@@ -26,4 +26,16 @@ abstract class AppointmentRepository {
 
   /// Récupère les détails d'un médecin par son id
   Future<Doctor?> getDoctorById(String id);
+
+  /// Ajoute un nouveau médecin à l'annuaire (Create Doctor)
+  Future<void> createDoctor(Doctor doctor);
+
+  /// Met à jour les coordonnées d'un médecin (Update Doctor)
+  Future<void> updateDoctor(Doctor doctor);
+
+  /// Supprime un médecin de l'annuaire (Delete Doctor)
+  Future<void> deleteDoctor(String id);
+
+  /// Vérifie si un médecin a des rendez-vous rattachés
+  Future<bool> doctorHasAppointments(String id);
 }

@@ -159,6 +159,25 @@ class TranslationsAr with BaseTranslations<AppLocale, Translations> implements T
 	@override String get saveFailed => 'تعذر الحفظ. يرجى المحاولة مرة أخرى.';
 	@override String diagnosedIn({required Object date}) => 'تم التشخيص في ${date}';
 	@override String get unknownDate => 'تاريخ غير معروف';
+	@override String get nearbyTitle => 'الأطباء والعيادات القريبة';
+	@override String get nearbySearchHint => 'ابحث عن طبيب، عيادة، اختصاص...';
+	@override String get nearbyRadius => 'النطاق';
+	@override String nearbySaved({required Object name}) => 'تمت إضافة ${name} إلى دليل أطبائك!';
+	@override String nearbyAlreadySaved({required Object name}) => '${name} موجود بالفعل في دليلك.';
+	@override String get nearbyBookAppointment => 'حجز موعد';
+	@override String get nearbyOsmAttribution => '© مساهمو OpenStreetMap';
+	@override String get nearbyOsmWarning => 'بيانات OpenStreetMap: يرجى التحقق من المعلومات مباشرة مع المؤسسة.';
+	@override String get orientationTitle => 'التوجيه الطبي';
+	@override String get orientationSubtitle => 'ما هو الاختصاص الطبي المناسب؟';
+	@override String get orientationDisclaimer => 'هذا الاقتراح هو توجيه عام وليس تشخيصاً طبياً. ولا يغني عن استشارة الطبيب. في حالات الطوارئ اتصل بـ 190.';
+	@override String get orientationFindSpecialty => 'إيجاد الاختصاص المناسب';
+	@override String get orientationSymptomsHint => 'صف ما تشعر به (ألم، موضعه، مدته)...';
+	@override String get orientationAnalyzing => 'جارٍ التحليل...';
+	@override String get orientationEmergencyAlert => 'تنبيه: حالة طوارئ طبية محتملة';
+	@override String get orientationEmergencyCall => 'الاتصال بالإسعاف (190)';
+	@override String get orientationHistory => 'سجل التوجيهات الطبية';
+	@override String get orientationNoHistory => 'لا يوجد سجل محفوظ';
+	@override String get orientationClearHistory => 'مسح الكل';
 }
 
 // Path: biologicalSexOptions
@@ -392,6 +411,25 @@ extension on TranslationsAr {
 			'saveFailed' => 'تعذر الحفظ. يرجى المحاولة مرة أخرى.',
 			'diagnosedIn' => ({required Object date}) => 'تم التشخيص في ${date}',
 			'unknownDate' => 'تاريخ غير معروف',
+			'nearbyTitle' => 'الأطباء والعيادات القريبة',
+			'nearbySearchHint' => 'ابحث عن طبيب، عيادة، اختصاص...',
+			'nearbyRadius' => 'النطاق',
+			'nearbySaved' => ({required Object name}) => 'تمت إضافة ${name} إلى دليل أطبائك!',
+			'nearbyAlreadySaved' => ({required Object name}) => '${name} موجود بالفعل في دليلك.',
+			'nearbyBookAppointment' => 'حجز موعد',
+			'nearbyOsmAttribution' => '© مساهمو OpenStreetMap',
+			'nearbyOsmWarning' => 'بيانات OpenStreetMap: يرجى التحقق من المعلومات مباشرة مع المؤسسة.',
+			'orientationTitle' => 'التوجيه الطبي',
+			'orientationSubtitle' => 'ما هو الاختصاص الطبي المناسب؟',
+			'orientationDisclaimer' => 'هذا الاقتراح هو توجيه عام وليس تشخيصاً طبياً. ولا يغني عن استشارة الطبيب. في حالات الطوارئ اتصل بـ 190.',
+			'orientationFindSpecialty' => 'إيجاد الاختصاص المناسب',
+			'orientationSymptomsHint' => 'صف ما تشعر به (ألم، موضعه، مدته)...',
+			'orientationAnalyzing' => 'جارٍ التحليل...',
+			'orientationEmergencyAlert' => 'تنبيه: حالة طوارئ طبية محتملة',
+			'orientationEmergencyCall' => 'الاتصال بالإسعاف (190)',
+			'orientationHistory' => 'سجل التوجيهات الطبية',
+			'orientationNoHistory' => 'لا يوجد سجل محفوظ',
+			'orientationClearHistory' => 'مسح الكل',
 			_ => null,
 		};
 	}

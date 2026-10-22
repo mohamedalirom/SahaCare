@@ -159,6 +159,25 @@ class TranslationsFr with BaseTranslations<AppLocale, Translations> implements T
 	@override String get saveFailed => 'Enregistrement impossible. Veuillez réessayer.';
 	@override String diagnosedIn({required Object date}) => 'Diagnostiquée en ${date}';
 	@override String get unknownDate => 'Date inconnue';
+	@override String get nearbyTitle => 'Médecins et cliniques à proximité';
+	@override String get nearbySearchHint => 'Rechercher médecin, clinique, spécialité...';
+	@override String get nearbyRadius => 'Rayon';
+	@override String nearbySaved({required Object name}) => '${name} a été enregistré dans votre carnet !';
+	@override String nearbyAlreadySaved({required Object name}) => '${name} existe déjà dans votre carnet.';
+	@override String get nearbyBookAppointment => 'Prendre RDV';
+	@override String get nearbyOsmAttribution => '© Contributeurs d\'OpenStreetMap';
+	@override String get nearbyOsmWarning => 'Données OpenStreetMap : vérifiez les informations auprès de l\'établissement.';
+	@override String get orientationTitle => 'Orientation Médicale';
+	@override String get orientationSubtitle => 'Quelle spécialité consulter ?';
+	@override String get orientationDisclaimer => 'Cette suggestion est une orientation générale, pas un diagnostic. Elle ne remplace pas l\'avis d\'un médecin. En cas d\'urgence, appelez le 190.';
+	@override String get orientationFindSpecialty => 'Trouver la bonne spécialité';
+	@override String get orientationSymptomsHint => 'Décrivez ce que vous ressentez (douleur, localisation, durée)...';
+	@override String get orientationAnalyzing => 'Analyse en cours...';
+	@override String get orientationEmergencyAlert => 'Attention : Urgence médicale potentielle';
+	@override String get orientationEmergencyCall => 'Appeler le SAMU (190)';
+	@override String get orientationHistory => 'Historique des orientations';
+	@override String get orientationNoHistory => 'Aucun historique enregistré';
+	@override String get orientationClearHistory => 'Tout effacer';
 }
 
 // Path: biologicalSexOptions
@@ -392,6 +411,25 @@ extension on TranslationsFr {
 			'saveFailed' => 'Enregistrement impossible. Veuillez réessayer.',
 			'diagnosedIn' => ({required Object date}) => 'Diagnostiquée en ${date}',
 			'unknownDate' => 'Date inconnue',
+			'nearbyTitle' => 'Médecins et cliniques à proximité',
+			'nearbySearchHint' => 'Rechercher médecin, clinique, spécialité...',
+			'nearbyRadius' => 'Rayon',
+			'nearbySaved' => ({required Object name}) => '${name} a été enregistré dans votre carnet !',
+			'nearbyAlreadySaved' => ({required Object name}) => '${name} existe déjà dans votre carnet.',
+			'nearbyBookAppointment' => 'Prendre RDV',
+			'nearbyOsmAttribution' => '© Contributeurs d\'OpenStreetMap',
+			'nearbyOsmWarning' => 'Données OpenStreetMap : vérifiez les informations auprès de l\'établissement.',
+			'orientationTitle' => 'Orientation Médicale',
+			'orientationSubtitle' => 'Quelle spécialité consulter ?',
+			'orientationDisclaimer' => 'Cette suggestion est une orientation générale, pas un diagnostic. Elle ne remplace pas l\'avis d\'un médecin. En cas d\'urgence, appelez le 190.',
+			'orientationFindSpecialty' => 'Trouver la bonne spécialité',
+			'orientationSymptomsHint' => 'Décrivez ce que vous ressentez (douleur, localisation, durée)...',
+			'orientationAnalyzing' => 'Analyse en cours...',
+			'orientationEmergencyAlert' => 'Attention : Urgence médicale potentielle',
+			'orientationEmergencyCall' => 'Appeler le SAMU (190)',
+			'orientationHistory' => 'Historique des orientations',
+			'orientationNoHistory' => 'Aucun historique enregistré',
+			'orientationClearHistory' => 'Tout effacer',
 			_ => null,
 		};
 	}

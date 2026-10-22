@@ -48,6 +48,7 @@ extension ReminderOptionExt on ReminderOption {
 class Appointment {
   final String id;
   final String doctorId;
+  final String? patientId;
   final String doctorName;
   final String doctorSpecialty;
   final String doctorAddress;
@@ -64,6 +65,7 @@ class Appointment {
   const Appointment({
     required this.id,
     required this.doctorId,
+    this.patientId,
     required this.doctorName,
     required this.doctorSpecialty,
     required this.doctorAddress,
@@ -81,6 +83,7 @@ class Appointment {
   Appointment copyWith({
     String? id,
     String? doctorId,
+    String? patientId,
     String? doctorName,
     String? doctorSpecialty,
     String? doctorAddress,
@@ -97,6 +100,7 @@ class Appointment {
     return Appointment(
       id: id ?? this.id,
       doctorId: doctorId ?? this.doctorId,
+      patientId: patientId ?? this.patientId,
       doctorName: doctorName ?? this.doctorName,
       doctorSpecialty: doctorSpecialty ?? this.doctorSpecialty,
       doctorAddress: doctorAddress ?? this.doctorAddress,
