@@ -9,6 +9,7 @@ import '../widgets/health_line_chart.dart';
 import '../widgets/measurement_stats_row.dart';
 import '../widgets/period_selector.dart';
 import '../widgets/health_palette.dart';
+import '../widgets/phone_frame_insets.dart';
 
 /// Statistiques : graphiques de tous les indicateurs, un onglet par type
 class HealthStatisticsScreen extends ConsumerStatefulWidget {
@@ -25,22 +26,24 @@ class _HealthStatisticsScreenState extends ConsumerState<HealthStatisticsScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return DefaultTabController(
-      length: MeasurementType.values.length,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('Statistiques santé'),
-          bottom: TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            labelColor: theme.colorScheme.primary,
-            unselectedLabelColor: context.healthTextSecondary,
-            indicatorColor: theme.colorScheme.primary,
-            indicatorWeight: 3,
-            tabs: MeasurementType.values.map((t) => Tab(icon: Icon(t.icon, size: 20), text: t.label)).toList(),
+    return PhoneFrameInsets(
+      child: DefaultTabController(
+        length: MeasurementType.values.length,
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text('Statistiques santé'),
+            bottom: TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              labelColor: theme.colorScheme.primary,
+              unselectedLabelColor: context.healthTextSecondary,
+              indicatorColor: theme.colorScheme.primary,
+              indicatorWeight: 3,
+              tabs: MeasurementType.values.map((t) => Tab(icon: Icon(t.icon, size: 20), text: t.label)).toList(),
+            ),
           ),
+          body: HealthAsyncView(builder: (_) => TabBarView(children: MeasurementType.values.map(_buildTab).toList())),
         ),
-        body: HealthAsyncView(builder: (_) => TabBarView(children: MeasurementType.values.map(_buildTab).toList())),
       ),
     );
   }

@@ -7,6 +7,7 @@ import '../../../../core/widgets/custom_button.dart';
 import '../../domain/entities/health_measurement.dart';
 import '../controllers/health_tracking_controller.dart';
 import '../widgets/health_palette.dart';
+import '../widgets/phone_frame_insets.dart';
 
 /// Formulaire d'ajout (ou de modification) d'une mesure de santé.
 /// Les champs s'adaptent au type de mesure choisi.
@@ -150,103 +151,107 @@ class _AddMeasurementScreenState extends ConsumerState<AddMeasurementScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isEdit && _original == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Modifier la mesure')),
-        body: const Center(child: Text('Mesure introuvable')),
+      return PhoneFrameInsets(
+        child: Scaffold(
+          appBar: AppBar(title: const Text('Modifier la mesure')),
+          body: const Center(child: Text('Mesure introuvable')),
+        ),
       );
     }
-    return Scaffold(
-      appBar: AppBar(title: Text(_isEdit ? 'Modifier la mesure' : 'Nouvelle mesure')),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // En-tête du type
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: _type.color.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(16),
+    return PhoneFrameInsets(
+      child: Scaffold(
+        appBar: AppBar(title: Text(_isEdit ? 'Modifier la mesure' : 'Nouvelle mesure')),
+        body: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // En-tête du type
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _type.color.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Icon(_type.icon, color: _type.color, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _type.label,
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.healthText),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Référence : ${_type.normalRange}',
+                            style: TextStyle(fontSize: 12, color: context.healthTextSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
+              const SizedBox(height: 20),
+
+              ..._buildValueFields(),
+              const SizedBox(height: 16),
+
+              if (_type == MeasurementType.glycemia) ...[
+                const _FieldLabel('Moment de la mesure'),
+                const SizedBox(height: 8),
+                SegmentedButton<GlycemiaContext>(
+                  segments: GlycemiaContext.values.map((c) => ButtonSegment(value: c, label: Text(c.label))).toList(),
+                  selected: {_glycemiaContext},
+                  onSelectionChanged: (s) => setState(() => _glycemiaContext = s.first),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              const _FieldLabel('Date et heure'),
+              const SizedBox(height: 8),
+              Row(
                 children: [
-                  Icon(_type.icon, color: _type.color, size: 28),
-                  const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _type.label,
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: context.healthText),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Référence : ${_type.normalRange}',
-                          style: TextStyle(fontSize: 12, color: context.healthTextSecondary),
-                        ),
-                      ],
+                    child: OutlinedButton.icon(
+                      onPressed: _pickDate,
+                      icon: const Icon(Icons.calendar_today_rounded, size: 18),
+                      label: Text(AppUtils.formatDate(_dateTime)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _pickTime,
+                      icon: const Icon(Icons.access_time_rounded, size: 18),
+                      label: Text(TimeOfDay.fromDateTime(_dateTime).format(context)),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 20),
-
-            ..._buildValueFields(),
-            const SizedBox(height: 16),
-
-            if (_type == MeasurementType.glycemia) ...[
-              const _FieldLabel('Moment de la mesure'),
-              const SizedBox(height: 8),
-              SegmentedButton<GlycemiaContext>(
-                segments: GlycemiaContext.values.map((c) => ButtonSegment(value: c, label: Text(c.label))).toList(),
-                selected: {_glycemiaContext},
-                onSelectionChanged: (s) => setState(() => _glycemiaContext = s.first),
-              ),
               const SizedBox(height: 16),
+
+              const _FieldLabel('Note (optionnelle)'),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _noteController,
+                maxLines: 3,
+                decoration: _decoration(hint: 'Ex : mesurée après le sport, sensation de fatigue…'),
+              ),
+              const SizedBox(height: 28),
+
+              CustomButton(
+                label: _isEdit ? 'Enregistrer les modifications' : 'Enregistrer la mesure',
+                icon: Icons.check_rounded,
+                isLoading: _isSaving,
+                onPressed: _save,
+              ),
             ],
-
-            const _FieldLabel('Date et heure'),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickDate,
-                    icon: const Icon(Icons.calendar_today_rounded, size: 18),
-                    label: Text(AppUtils.formatDate(_dateTime)),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickTime,
-                    icon: const Icon(Icons.access_time_rounded, size: 18),
-                    label: Text(TimeOfDay.fromDateTime(_dateTime).format(context)),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            const _FieldLabel('Note (optionnelle)'),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _noteController,
-              maxLines: 3,
-              decoration: _decoration(hint: 'Ex : mesurée après le sport, sensation de fatigue…'),
-            ),
-            const SizedBox(height: 28),
-
-            CustomButton(
-              label: _isEdit ? 'Enregistrer les modifications' : 'Enregistrer la mesure',
-              icon: Icons.check_rounded,
-              isLoading: _isSaving,
-              onPressed: _save,
-            ),
-          ],
+          ),
         ),
       ),
     );

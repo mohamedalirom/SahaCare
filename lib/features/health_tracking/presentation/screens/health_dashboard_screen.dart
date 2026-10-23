@@ -7,6 +7,7 @@ import '../widgets/measurement_tile.dart';
 import '../widgets/measurement_type_picker_sheet.dart';
 import '../widgets/metric_summary_card.dart';
 import '../widgets/health_palette.dart';
+import '../widgets/phone_frame_insets.dart';
 
 /// Écran tableau de bord principal du module : Suivi de santé
 class HealthDashboardScreen extends StatelessWidget {
@@ -19,25 +20,34 @@ class HealthDashboardScreen extends StatelessWidget {
     }
   }
 
+  /// Hauteur occupée par la barre de navigation flottante (60) + sa marge (24)
+  static const double _floatingNavBarHeight = 84;
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Suivi de santé'),
-        actions: [
-          IconButton(
-            tooltip: 'Statistiques',
-            icon: const Icon(Icons.insights_rounded),
-            onPressed: () => context.push('/health-tracking/stats'),
+    return PhoneFrameInsets(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Suivi de santé'),
+          actions: [
+            IconButton(
+              tooltip: 'Statistiques',
+              icon: const Icon(Icons.insights_rounded),
+              onPressed: () => context.push('/health-tracking/stats'),
+            ),
+          ],
+        ),
+        // Surélevé pour rester au-dessus de la barre de navigation flottante
+        floatingActionButton: Padding(
+          padding: const EdgeInsets.only(bottom: _floatingNavBarHeight),
+          child: FloatingActionButton.extended(
+            onPressed: () => _addMeasurement(context),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Nouvelle mesure'),
           ),
-        ],
+        ),
+        body: HealthAsyncView(builder: (measurements) => _buildContent(context, measurements)),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _addMeasurement(context),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Nouvelle mesure'),
-      ),
-      body: HealthAsyncView(builder: (measurements) => _buildContent(context, measurements)),
     );
   }
 
@@ -53,7 +63,8 @@ class HealthDashboardScreen extends StatelessWidget {
         .length;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+      // Espace en bas pour le bouton et la barre de navigation flottante
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96 + _floatingNavBarHeight),
       children: [
         // Carte de synthèse
         Container(
