@@ -1,3 +1,6 @@
+import '../widgets/medication_scaffold.dart';
+import '../widgets/medication_notification_panel.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../data/medication_repository.dart';
@@ -57,7 +60,8 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => MedicationScaffold(
+    manageNotifications: widget.repository == null,
     backgroundColor: const Color(0xFFF8FAFC),
     appBar: AppBar(
       backgroundColor: Colors.white,
@@ -98,6 +102,10 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
               style: TextStyle(fontSize: 15, color: Color(0xFF64748B)),
             ),
             const SizedBox(height: 25),
+            if (widget.repository == null) ...[
+              const MedicationNotificationPanel(),
+              const SizedBox(height: 16),
+            ],
             if (medications.isEmpty)
               Container(
                 padding: const EdgeInsets.all(20),
@@ -151,7 +159,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Ce réglage enregistre votre préférence de rappel pour chaque traitement.',
+                      'Chaque interrupteur conserve votre préférence. Sur mobile, les rappels nécessitent aussi l’autorisation du système. Une programmation ne confirme pas la réception.',
                       style: TextStyle(color: Color(0xFF0F172A), height: 1.4),
                     ),
                   ),

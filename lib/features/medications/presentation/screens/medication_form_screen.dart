@@ -1,3 +1,5 @@
+import '../widgets/medication_scaffold.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -5,6 +7,7 @@ import '../../data/medication_catalog_repository.dart';
 import '../../data/medication_repository.dart';
 import '../../domain/entities/medication.dart';
 import '../widgets/autocomplete_medication_field.dart';
+import '../widgets/medication_stock_form.dart';
 
 class MedicationFormScreen extends StatefulWidget {
   const MedicationFormScreen({
@@ -28,6 +31,7 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
   final _dosageController = TextEditingController();
   final _startDateController = TextEditingController();
   final _endDateController = TextEditingController();
+  final _stockController = MedicationStockFormController();
   final List<String> _scheduleTimes = [];
   MedicationRepository get _repository =>
       widget.repository ?? MedicationRepository.instance;
@@ -58,6 +62,7 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
     _dosageController.dispose();
     _startDateController.dispose();
     _endDateController.dispose();
+    _stockController.dispose();
     super.dispose();
   }
 
@@ -78,6 +83,7 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
       }
       _nameController.text = medication.name;
       _dosageController.text = medication.dosage;
+      _stockController.load(medication.stock);
       _startDateController.text = _formatDate(medication.startDate);
       _endDateController.text = medication.endDate == null
           ? ''
@@ -225,6 +231,7 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
       commercialPresentation: _selectedPresentation,
       scheduleTimes: List.unmodifiable(_scheduleTimes),
       weekdaysMask: _weekdaysMask,
+      stock: _stockController.value,
     );
 
     try {
@@ -265,7 +272,8 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return MedicationScaffold(
+      manageNotifications: widget.repository == null,
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -450,6 +458,11 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 30),
+                  MedicationStockForm(
+                    controller: _stockController,
+                    presentation: _selectedPresentation,
+                  ),
+                  const SizedBox(height: 20),
                   SizedBox(
                     height: 52,
                     child: ElevatedButton.icon(

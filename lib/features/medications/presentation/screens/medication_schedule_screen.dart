@@ -1,9 +1,12 @@
+import '../widgets/medication_scaffold.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/config/supabase_config.dart';
 import '../../data/medication_repository.dart';
 import '../../domain/entities/medication_occurrence.dart';
+import '../../domain/entities/medication_stock.dart';
 import '../widgets/medication_calendar_widgets.dart';
 
 enum _CalendarView { day, week, month }
@@ -138,6 +141,25 @@ class _MedicationScheduleScreenState extends State<MedicationScheduleScreen> {
     setState(() => _busyOccurrenceIds.add(occurrence.id));
     try {
       await update();
+      final medication = await _repository.getById(occurrence.medicationId);
+      final stock = medication?.stock;
+      if (mounted &&
+          stock != null &&
+          stock.enabled &&
+          stock.alert != StockAlert.normal) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              stock.pendingAnomalies > 0
+                  ? 'Une prise a été confirmée sans débit complet du stock. Une anomalie reste à régulariser sur la fiche du médicament.'
+                  : 'Stock faible : ${stock.remaining.display} ${stock.unit.label}. Consultez la fiche du médicament.',
+            ),
+            backgroundColor: stock.pendingAnomalies > 0
+                ? const Color(0xFFDC2626)
+                : const Color(0xFFD97706),
+          ),
+        );
+      }
       if (mounted) {
         setState(() => _busyOccurrenceIds.remove(occurrence.id));
       }
@@ -200,7 +222,8 @@ class _MedicationScheduleScreenState extends State<MedicationScheduleScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => MedicationScaffold(
+    manageNotifications: widget.repository == null,
     backgroundColor: const Color(0xFFF8FAFC),
     appBar: AppBar(
       backgroundColor: Colors.white,

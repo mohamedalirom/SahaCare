@@ -17,7 +17,14 @@ void main() {
   testWidgets('requires medication details before showing success', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: MedicationFormScreen()));
+    final repository = MedicationRepository(
+      databaseFactory: databaseFactoryFfi,
+      databasePath: inMemoryDatabasePath,
+    );
+    addTearDown(repository.close);
+    await tester.pumpWidget(
+      MaterialApp(home: MedicationFormScreen(repository: repository)),
+    );
 
     final saveButton = find.text('Enregistrer le médicament');
     await tester.scrollUntilVisible(
@@ -35,7 +42,14 @@ void main() {
   testWidgets('adds, edits, removes and validates schedule times', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: MedicationFormScreen()));
+    final repository = MedicationRepository(
+      databaseFactory: databaseFactoryFfi,
+      databasePath: inMemoryDatabasePath,
+    );
+    addTearDown(repository.close);
+    await tester.pumpWidget(
+      MaterialApp(home: MedicationFormScreen(repository: repository)),
+    );
 
     await _addTime(tester, '08:00');
     await _addTime(tester, '08:00');
@@ -157,10 +171,12 @@ void main() {
       250,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.text('Enregistrer le médicament'));
+    // Keep SQLite transaction continuations outside the widget fake clock.
+    final savedMedications = await tester.runAsync(() async {
+      await tester.tap(find.text('Enregistrer le médicament'));
+      return repository.getAll();
+    });
     await tester.pump();
-
-    final savedMedications = await tester.runAsync(repository.getAll);
     if (savedMedications == null) {
       fail('SQLite was not queried outside the widget test fake-async zone.');
     }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sahacare/core/widgets/phone_frame_wrapper.dart';
 import 'package:sahacare/features/medications/data/medication_repository.dart';
 import 'package:sahacare/features/medications/domain/entities/medication.dart';
 import 'package:sahacare/features/medications/domain/entities/medication_occurrence.dart';
@@ -11,6 +12,152 @@ import 'package:sahacare/features/medications/presentation/screens/medications_d
 import 'package:sahacare/features/medications/presentation/widgets/medication_calendar_widgets.dart';
 
 void main() {
+  for (final size in const [Size(320, 568), Size(360, 640), Size(412, 860)]) {
+    testWidgets('add action never covers the list at $size', (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repository = _MemoryMedicationRepository(
+        Medication(
+          id: 1,
+          name: 'Traitement du jour',
+          dosage: '1 comprimé',
+          time: '08:00',
+          startDate: DateTime.now(),
+          reminderEnabled: false,
+        ),
+      );
+      final router = GoRouter(
+        initialLocation: '/medications',
+        routes: [
+          GoRoute(
+            path: '/medications',
+            builder: (context, state) =>
+                MedicationsDashboardScreen(repository: repository),
+          ),
+          GoRoute(
+            path: '/medications/add',
+            builder: (context, state) =>
+                const Scaffold(body: Text('Formulaire ajout')),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      addTearDown(repository.close);
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      await tester.pumpAndSettle();
+      final add = find.byKey(const ValueKey('add-medication-button'));
+      final actionRect = tester.getRect(add);
+      expect(
+        tester.getRect(find.byType(ListView)).bottom,
+        lessThanOrEqualTo(actionRect.top),
+      );
+      await tester.scrollUntilVisible(find.text('Aujourd’hui'), 150);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.byType(ListView)).bottom,
+        lessThanOrEqualTo(tester.getRect(add).top),
+      );
+      expect(tester.getRect(add), actionRect);
+      expect(tester.takeException(), isNull);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      expect(find.text('Formulaire ajout'), findsOneWidget);
+    });
+  }
+
+  testWidgets('dashboard clears the simulated notch and floating navigation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repository = _MemoryMedicationRepository(
+      Medication(
+        id: 1,
+        name: 'Traitement',
+        dosage: '1 comprimé',
+        time: '08:00',
+        startDate: DateTime.now(),
+        reminderEnabled: false,
+      ),
+    );
+    addTearDown(repository.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => PhoneFrameWrapper(child: child!),
+        home: MedicationsDashboardScreen(repository: repository),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final frame = tester.getRect(find.byType(ClipRRect).first);
+    expect(
+      tester.getTopLeft(find.text('Médicaments & Traitements')).dy,
+      greaterThanOrEqualTo(frame.top + 48),
+    );
+    expect(
+      tester
+          .getBottomLeft(find.byKey(const ValueKey('add-medication-button')))
+          .dy,
+      lessThanOrEqualTo(frame.bottom - 100),
+    );
+    await tester.scrollUntilVisible(
+      find.text('Rappels'),
+      200,
+      scrollable: find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getBottomLeft(find.text('Rappels')).dy,
+      lessThan(frame.bottom - 100),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('dashboard fits a small screen with system safe insets', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(top: 24, bottom: 20);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPadding);
+    final repository = _MemoryMedicationRepository(
+      Medication(
+        id: 1,
+        name: 'Traitement',
+        dosage: '1 comprimé',
+        time: '08:00',
+        startDate: DateTime.now(),
+        reminderEnabled: false,
+      ),
+    );
+    addTearDown(repository.close);
+    await tester.pumpWidget(
+      MaterialApp(home: MedicationsDashboardScreen(repository: repository)),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getTopLeft(find.text('Médicaments & Traitements')).dy,
+      greaterThanOrEqualTo(24),
+    );
+    expect(
+      tester
+          .getBottomLeft(find.byKey(const ValueKey('add-medication-button')))
+          .dy,
+      lessThanOrEqualTo(568 - 20 - 100),
+    );
+    await tester.scrollUntilVisible(find.text('Rappels'), 150);
+    expect(tester.takeException(), isNull);
+  });
+
   test('calendar indicators follow recorded occurrence status', () {
     final occurrence = MedicationOccurrence(
       id: 1,
@@ -99,17 +246,28 @@ void main() {
       await tester.tap(find.text('Doliprane'));
       await tester.pumpAndSettle();
       expect(find.text('Détail du traitement'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('500 mg'),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('500 mg'), findsOneWidget);
       expect(find.text('Paracétamol'), findsOneWidget);
       expect(find.text('500 mg • Comprimé'), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.text('08:00'),
-        200,
+        find.text('Horaires de prise'),
+        100,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.pumpAndSettle();
       expect(find.text('Horaires de prise'), findsOneWidget);
       expect(find.text('08:00'), findsOneWidget);
 
+      await tester.scrollUntilVisible(
+        find.text('Modifier le traitement'),
+        -150,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('Modifier le traitement'));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -223,6 +381,7 @@ void main() {
         250,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Horaires de prise'));
       await tester.pumpAndSettle();
       expect(find.text('Calendrier thérapeutique'), findsOneWidget);
@@ -522,11 +681,17 @@ void main() {
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
     expect(find.text('Traitement actif'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Traitement terminé'), 100);
+    await tester.pumpAndSettle();
     expect(find.text('Traitement terminé'), findsOneWidget);
 
+    await tester.scrollUntilVisible(find.text('Terminés'), -100);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Terminés'));
     await tester.pumpAndSettle();
     expect(find.text('Traitements terminés'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Traitement terminé'), 100);
+    await tester.pumpAndSettle();
     expect(find.text('Traitement terminé'), findsOneWidget);
     expect(find.text('Traitement actif'), findsNothing);
   });

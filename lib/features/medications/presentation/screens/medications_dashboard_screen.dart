@@ -1,8 +1,12 @@
+import '../widgets/medication_scaffold.dart';
+import '../widgets/medication_notification_panel.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/medication_repository.dart';
 import '../../domain/entities/medication.dart';
+import '../../domain/entities/medication_stock.dart';
 
 enum _MedicationFilter { active, completed, all }
 
@@ -40,13 +44,16 @@ class _MedicationsDashboardScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return MedicationScaffold(
+      manageNotifications: widget.repository == null,
+      reserveNavigationSpace: true,
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         title: const Text(
           'Médicaments & Traitements',
+          maxLines: 2,
           style: TextStyle(
             color: Color(0xFF0F172A),
             fontWeight: FontWeight.bold,
@@ -95,7 +102,7 @@ class _MedicationsDashboardScreenState
           }).toList();
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 184),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
             children: [
               const Text(
                 'Mes traitements',
@@ -111,6 +118,10 @@ class _MedicationsDashboardScreenState
                 style: TextStyle(fontSize: 15, color: Color(0xFF64748B)),
               ),
               const SizedBox(height: 25),
+              if (widget.repository == null) ...[
+                const MedicationNotificationPanel(),
+                const SizedBox(height: 16),
+              ],
               SegmentedButton<_MedicationFilter>(
                 segments: const [
                   ButtonSegment(
@@ -197,17 +208,26 @@ class _MedicationsDashboardScreenState
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0D9488),
-        foregroundColor: Colors.white,
-        onPressed: () => _open('/medications/add'),
-        icon: const Icon(Icons.add),
-        label: const Text(
-          'Ajouter',
-          style: TextStyle(fontWeight: FontWeight.bold),
+      bottomAction: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+        child: SizedBox(
+          height: 52,
+          child: ElevatedButton.icon(
+            key: const ValueKey('add-medication-button'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0D9488),
+              foregroundColor: Colors.white,
+              shape: const StadiumBorder(),
+            ),
+            onPressed: () => _open('/medications/add'),
+            icon: const Icon(Icons.add),
+            label: const Text(
+              'Ajouter',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
         ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -485,6 +505,28 @@ class _MedicationCard extends StatelessWidget {
                       color: Color(0xFF64748B),
                     ),
                   ),
+                  if (medication.stock case final stock?) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      !stock.enabled
+                          ? 'Suivi du stock désactivé'
+                          : stock.pendingAnomalies > 0
+                          ? 'Stock à régulariser : ${stock.pendingAnomalies} anomalie(s)'
+                          : 'Stock : ${stock.remaining.display} ${stock.unit.label}'
+                                '${stock.alert == StockAlert.low || stock.alert == StockAlert.empty ? ' • Stock faible' : ''}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color:
+                            stock.alert == StockAlert.anomaly ||
+                                stock.alert == StockAlert.empty
+                            ? const Color(0xFFDC2626)
+                            : stock.alert == StockAlert.low
+                            ? const Color(0xFFD97706)
+                            : const Color(0xFF0D9488),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

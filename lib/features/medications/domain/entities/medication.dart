@@ -1,3 +1,5 @@
+import 'medication_stock.dart';
+
 class Medication {
   const Medication({
     this.id,
@@ -11,6 +13,7 @@ class Medication {
     this.commercialPresentation,
     this.scheduleTimes = const [],
     this.weekdaysMask = 127,
+    this.stock,
   });
 
   final int? id;
@@ -24,6 +27,7 @@ class Medication {
   final String? commercialPresentation;
   final List<String> scheduleTimes;
   final int weekdaysMask;
+  final MedicationStock? stock;
 
   bool isActiveOn(DateTime date) {
     final day = DateTime(date.year, date.month, date.day);
@@ -47,6 +51,7 @@ class Medication {
     bool? reminderEnabled,
     String? activeIngredient,
     String? commercialPresentation,
+    MedicationStock? stock,
   }) {
     return Medication(
       id: id ?? this.id,
@@ -55,6 +60,7 @@ class Medication {
       time: time ?? this.time,
       scheduleTimes: scheduleTimes ?? this.scheduleTimes,
       weekdaysMask: weekdaysMask ?? this.weekdaysMask,
+      stock: stock ?? this.stock,
       startDate: startDate ?? this.startDate,
       endDate: clearEndDate ? null : endDate ?? this.endDate,
       reminderEnabled: reminderEnabled ?? this.reminderEnabled,
@@ -93,6 +99,7 @@ class Medication {
       commercialPresentation: map['commercial_presentation'] as String?,
       scheduleTimes: (map['schedule_times'] as List<String>?) ?? const [],
       weekdaysMask: map['weekdays_mask'] as int? ?? 127,
+      stock: map['stock'] as MedicationStock?,
     );
   }
 

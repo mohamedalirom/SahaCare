@@ -7,11 +7,13 @@ import '../../../core/database/platform_db/db_init.dart';
 import '../../../core/config/supabase_config.dart';
 import '../domain/entities/medication.dart';
 import '../domain/entities/medication_occurrence.dart';
+import '../domain/entities/medication_stock.dart';
 
 class MedicationRepository {
   MedicationRepository({
     sqflite.DatabaseFactory? databaseFactory,
     String? databasePath,
+    this.onChanged,
   }) : _databaseFactoryOverride = databaseFactory,
        _databasePathOverride = databasePath;
 
@@ -20,6 +22,9 @@ class MedicationRepository {
   final sqflite.DatabaseFactory? _databaseFactoryOverride;
   final String? _databasePathOverride;
   sqflite.Database? _database;
+
+  /// Called after a committed business mutation, never inside its transaction.
+  Future<void> Function()? onChanged;
 
   Future<List<Medication>> getAll() async {
     final database = await _getDatabase();
@@ -49,14 +54,17 @@ class MedicationRepository {
   Future<int> create(Medication medication) async {
     final times = _validatedTimes(medication);
     final database = await _getDatabase();
-    return database.transaction((transaction) async {
+    final result = await database.transaction((transaction) async {
       final id = await transaction.insert(
         'medications',
         _medicationValues(medication, times),
       );
       await _saveSchedule(transaction, id, medication.weekdaysMask, times);
+      await _saveStockSettings(transaction, id, medication.stock);
       return id;
     });
+    await onChanged?.call();
+    return result;
   }
 
   Future<int> update(Medication medication) async {
@@ -66,7 +74,7 @@ class MedicationRepository {
     }
     final times = _validatedTimes(medication);
     final database = await _getDatabase();
-    return database.transaction((transaction) async {
+    final result = await database.transaction((transaction) async {
       final changed = await transaction.update(
         'medications',
         _medicationValues(medication, times),
@@ -75,13 +83,16 @@ class MedicationRepository {
       );
       if (changed == 0) return 0;
       await _saveSchedule(transaction, id, medication.weekdaysMask, times);
+      await _saveStockSettings(transaction, id, medication.stock);
       return changed;
     });
+    await onChanged?.call();
+    return result;
   }
 
   Future<int> delete(int id) async {
     final database = await _getDatabase();
-    return database.transaction((transaction) async {
+    final result = await database.transaction((transaction) async {
       final deleted = await transaction.update(
         'medications',
         {'deleted_at': DateTime.now().toIso8601String()},
@@ -96,6 +107,8 @@ class MedicationRepository {
       );
       return deleted;
     });
+    await onChanged?.call();
+    return result;
   }
 
   Future<int> ensureOccurrences({
@@ -225,17 +238,338 @@ class MedicationRepository {
   }
 
   Future<void> markOccurrenceTaken(int occurrenceId) async {
-    final changed = await (await _getDatabase()).update(
-      'medication_occurrences',
-      {
-        'status': MedicationOccurrenceStatus.taken.name,
-        'confirmed_at': DateTime.now().toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [occurrenceId],
+    final db = await _getDatabase();
+    await db.transaction((tx) async {
+      final rows = await tx.query(
+        'medication_occurrences',
+        where: 'id = ?',
+        whereArgs: [occurrenceId],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('Cette prise est introuvable.');
+      final occurrence = rows.single;
+      if (occurrence['status'] == 'taken') return;
+      final medicationId = occurrence['medication_id'] as int;
+      final key =
+          '$medicationId|${occurrence['scheduled_date']}|${occurrence['scheduled_time']}';
+      final receipt = await tx.query(
+        'medication_stock_movements',
+        where: 'occurrence_key = ?',
+        whereArgs: [key],
+        limit: 1,
+      );
+      if (receipt.isEmpty) {
+        final stock = await _loadStock(tx, medicationId);
+        var kind = 'untracked_confirmation';
+        var debit = 0;
+        var required = 0;
+        if (stock != null && stock.enabled) {
+          required = stock.unitsPerDose.milliUnits;
+          if (stock.remaining.milliUnits >= required) {
+            debit = required;
+            kind = 'consumption';
+            await tx.update(
+              'medication_stock',
+              {'remaining_milli': stock.remaining.milliUnits - debit},
+              where: 'medication_id = ?',
+              whereArgs: [medicationId],
+            );
+          } else {
+            // A real intake is recorded without a negative or partial debit.
+            kind = 'anomaly';
+          }
+        }
+        await _stockMovement(
+          tx,
+          medicationId,
+          kind,
+          -debit,
+          quantityAfter: stock == null
+              ? null
+              : stock.remaining.milliUnits - debit,
+          unit: stock?.unit,
+          required: required,
+          occurrenceKey: key,
+        );
+      }
+      await tx.update(
+        'medication_occurrences',
+        {'status': 'taken', 'confirmed_at': DateTime.now().toIso8601String()},
+        where: 'id = ?',
+        whereArgs: [occurrenceId],
+      );
+    });
+    await onChanged?.call();
+  }
+
+  Future<List<StockMovement>> stockMovements(int medicationId) async =>
+      (await (await _getDatabase()).rawQuery(
+        '''
+        SELECT m.*, CASE WHEN m.kind = 'anomaly' AND NOT EXISTS (
+          SELECT 1 FROM medication_stock_movements r WHERE r.resolves_id = m.id
+        ) THEN 1 ELSE 0 END AS unresolved
+        FROM medication_stock_movements m WHERE medication_id = ?
+        ORDER BY id DESC
+      ''',
+        [medicationId],
+      )).map(StockMovement.fromMap).toList();
+
+  Future<void> replenishStock(int medicationId, StockQuantity quantity) async {
+    final db = await _getDatabase();
+    await db.transaction((tx) async {
+      final stock = await _requireStock(tx, medicationId);
+      stock.unit.validate(quantity);
+      if (quantity.milliUnits <= 0) {
+        throw ArgumentError('Ajoutez une quantité positive.');
+      }
+      final remaining = stock.remaining + quantity;
+      await tx.update(
+        'medication_stock',
+        {
+          'remaining_milli': remaining.milliUnits,
+          'reference_milli':
+              remaining.milliUnits > stock.referenceQuantity.milliUnits
+              ? remaining.milliUnits
+              : stock.referenceQuantity.milliUnits,
+        },
+        where: 'medication_id = ?',
+        whereArgs: [medicationId],
+      );
+      await _stockMovement(
+        tx,
+        medicationId,
+        'replenishment',
+        quantity.milliUnits,
+        quantityAfter: remaining.milliUnits,
+        unit: stock.unit,
+      );
+    });
+    await onChanged?.call();
+  }
+
+  Future<void> correctStockQuantity(
+    int medicationId,
+    StockQuantity quantity, {
+    required String reason,
+    List<int> reconciledAnomalyIds = const [],
+  }) async {
+    final db = await _getDatabase();
+    await db.transaction((tx) async {
+      final stock = await _requireStock(tx, medicationId);
+      stock.unit.validate(quantity);
+      if (quantity.milliUnits < 0 || reason.trim().isEmpty) {
+        throw ArgumentError(
+          'Une quantité non négative et un motif sont requis.',
+        );
+      }
+      await tx.update(
+        'medication_stock',
+        {
+          'remaining_milli': quantity.milliUnits,
+          'reference_milli':
+              quantity.milliUnits > stock.referenceQuantity.milliUnits
+              ? quantity.milliUnits
+              : stock.referenceQuantity.milliUnits,
+        },
+        where: 'medication_id = ?',
+        whereArgs: [medicationId],
+      );
+      await _stockMovement(
+        tx,
+        medicationId,
+        'correction',
+        quantity.milliUnits - stock.remaining.milliUnits,
+        quantityAfter: quantity.milliUnits,
+        unit: stock.unit,
+        note: reason.trim(),
+      );
+      for (final anomalyId in reconciledAnomalyIds.toSet()) {
+        final anomaly = await _requireAnomaly(tx, medicationId, anomalyId);
+        if (anomaly == null) continue;
+        await _stockMovement(
+          tx,
+          medicationId,
+          'inventory_reconciliation',
+          0,
+          quantityAfter: quantity.milliUnits,
+          unit: stock.unit,
+          resolvesId: anomalyId,
+          required: anomaly['required_milli'] as int,
+          note: 'Comptage physique incluant cette prise. ${reason.trim()}',
+        );
+      }
+    });
+    await onChanged?.call();
+  }
+
+  Future<void> resolveStockAnomaly(int medicationId, int anomalyId) async {
+    final db = await _getDatabase();
+    await db.transaction((tx) async {
+      final stock = await _requireStock(tx, medicationId);
+      final anomaly = await _requireAnomaly(tx, medicationId, anomalyId);
+      if (anomaly == null) return; // Already resolved: idempotent.
+      final required = anomaly['required_milli'] as int;
+      if (stock.remaining.milliUnits < required) {
+        throw StateError(
+          'Stock insuffisant pour le débit complet. Corrigez la quantité ou réapprovisionnez.',
+        );
+      }
+      final remaining = stock.remaining.milliUnits - required;
+      await tx.update(
+        'medication_stock',
+        {'remaining_milli': remaining},
+        where: 'medication_id = ?',
+        whereArgs: [medicationId],
+      );
+      await _stockMovement(
+        tx,
+        medicationId,
+        'resolution',
+        -required,
+        quantityAfter: remaining,
+        unit: stock.unit,
+        required: required,
+        resolvesId: anomalyId,
+      );
+    });
+    await onChanged?.call();
+  }
+
+  Future<Map<String, Object?>?> _requireAnomaly(
+    sqflite.DatabaseExecutor db,
+    int medicationId,
+    int anomalyId,
+  ) async {
+    final rows = await db.query(
+      'medication_stock_movements',
+      where: "id = ? AND medication_id = ? AND kind = 'anomaly'",
+      whereArgs: [anomalyId, medicationId],
     );
-    if (changed == 0) {
-      throw StateError('Cette prise est introuvable.');
+    if (rows.isEmpty) throw StateError('Anomalie introuvable.');
+    final resolved = await db.query(
+      'medication_stock_movements',
+      where: 'resolves_id = ?',
+      whereArgs: [anomalyId],
+      limit: 1,
+    );
+    return resolved.isEmpty ? rows.single : null;
+  }
+
+  Future<MedicationStock> _requireStock(
+    sqflite.DatabaseExecutor db,
+    int medicationId,
+  ) async {
+    final medications = await db.query(
+      'medications',
+      columns: ['id'],
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [medicationId],
+    );
+    if (medications.isEmpty) {
+      throw StateError('Traitement introuvable ou archivé.');
+    }
+    final stock = await _loadStock(db, medicationId);
+    if (stock == null) {
+      throw StateError('Configurez d’abord le suivi du stock.');
+    }
+    return stock;
+  }
+
+  Future<MedicationStock?> _loadStock(
+    sqflite.DatabaseExecutor db,
+    int medicationId,
+  ) async {
+    final rows = await db.query(
+      'medication_stock',
+      where: 'medication_id = ?',
+      whereArgs: [medicationId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final count = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS n FROM medication_stock_movements m
+      WHERE medication_id = ? AND kind = 'anomaly' AND NOT EXISTS (
+        SELECT 1 FROM medication_stock_movements r WHERE r.resolves_id = m.id
+      )
+    ''',
+      [medicationId],
+    );
+    return MedicationStock.fromMap(
+      rows.single,
+      anomalies: count.single['n'] as int,
+    );
+  }
+
+  Future<void> _stockMovement(
+    sqflite.DatabaseExecutor db,
+    int medicationId,
+    String kind,
+    int delta, {
+    int? quantityAfter,
+    StockUnit? unit,
+    int required = 0,
+    String? occurrenceKey,
+    int? resolvesId,
+    String? note,
+  }) async {
+    await db.insert('medication_stock_movements', {
+      'medication_id': medicationId,
+      'kind': kind,
+      'delta_milli': delta,
+      'quantity_after_milli': quantityAfter,
+      'unit': unit?.name,
+      'required_milli': required,
+      'occurrence_key': occurrenceKey,
+      'resolves_id': resolvesId,
+      'created_at': DateTime.now().toIso8601String(),
+      'note': note,
+    });
+  }
+
+  Future<void> _saveStockSettings(
+    sqflite.DatabaseExecutor db,
+    int medicationId,
+    MedicationStock? stock,
+  ) async {
+    if (stock == null) return;
+    final old = await _loadStock(db, medicationId);
+    if (old == null) {
+      await db.insert('medication_stock', {
+        'medication_id': medicationId,
+        'enabled': stock.enabled ? 1 : 0,
+        'unit': stock.unit.name,
+        'initial_milli': stock.initialQuantity.milliUnits,
+        'remaining_milli': stock.initialQuantity.milliUnits,
+        'per_dose_milli': stock.unitsPerDose.milliUnits,
+        'threshold_milli': stock.lowThreshold.milliUnits,
+        'reference_milli': stock.initialQuantity.milliUnits,
+      });
+      await _stockMovement(
+        db,
+        medicationId,
+        'initial',
+        stock.initialQuantity.milliUnits,
+        quantityAfter: stock.initialQuantity.milliUnits,
+        unit: stock.unit,
+      );
+    } else {
+      if (old.unit != stock.unit) {
+        throw StateError(
+          'L’unité du stock est fixe pour préserver son historique.',
+        );
+      }
+      // Editing a stale form must not reset quantities changed by an intake.
+      await db.update(
+        'medication_stock',
+        {
+          'enabled': stock.enabled ? 1 : 0,
+          'per_dose_milli': stock.unitsPerDose.milliUnits,
+          'threshold_milli': stock.lowThreshold.milliUnits,
+        },
+        where: 'medication_id = ?',
+        whereArgs: [medicationId],
+      );
     }
   }
 
@@ -286,6 +620,7 @@ class MedicationRepository {
       whereArgs: [occurrenceId],
     );
     if (changed == 0) throw StateError('Cette prise est introuvable.');
+    await onChanged?.call();
   }
 
   Future<void> ignoreOccurrence(int occurrenceId) async {
@@ -298,6 +633,39 @@ class MedicationRepository {
     if (changed == 0) {
       throw StateError('Cette prise est introuvable.');
     }
+    await onChanged?.call();
+  }
+
+  Future<List<Map<String, Object?>>> notificationRegistry() async =>
+      (await _getDatabase()).query('medication_notification_registry');
+
+  /// Durable IDs are reserved before calling the OS. A crash can be reconciled
+  /// using these rows and the OS pending list on the next synchronization.
+  Future<int> notificationId(String key) async {
+    final db = await _getDatabase();
+    return db.transaction((transaction) async {
+      await transaction.insert('medication_notification_registry', {
+        'reminder_key': key,
+      }, conflictAlgorithm: sqflite.ConflictAlgorithm.ignore);
+      final rows = await transaction.query(
+        'medication_notification_registry',
+        where: 'reminder_key = ?',
+        whereArgs: [key],
+        limit: 1,
+      );
+      final id = 1000000000 + (rows.single['id'] as int);
+      if (id > 2147483647) throw StateError('Identifiants de rappel épuisés.');
+      return id;
+    });
+  }
+
+  Future<void> recordNotification(int systemId, String? signature) async {
+    await (await _getDatabase()).update(
+      'medication_notification_registry',
+      {'signature': signature},
+      where: 'id = ?',
+      whereArgs: [systemId - 1000000000],
+    );
   }
 
   Future<void> close() async {
@@ -318,7 +686,7 @@ class MedicationRepository {
     _database = await factory.openDatabase(
       databasePath,
       options: sqflite.OpenDatabaseOptions(
-        version: 4,
+        version: 6,
         onConfigure: (database) async {
           await database.execute('PRAGMA foreign_keys = ON');
         },
@@ -338,6 +706,8 @@ class MedicationRepository {
             )
           ''');
           await _createScheduleTables(database);
+          await _createNotificationRegistry(database);
+          await _createStockTables(database);
         },
         onUpgrade: (database, oldVersion, newVersion) async {
           if (oldVersion < 2) {
@@ -383,11 +753,71 @@ class MedicationRepository {
               'ALTER TABLE medications ADD COLUMN deleted_at TEXT',
             );
           }
+          if (oldVersion < 5) {
+            await _createNotificationRegistry(database);
+          }
+          if (oldVersion < 6) {
+            await _createStockTables(database);
+            // Receipts, not retroactive consumption. Never debit old intakes.
+            await database.execute('''
+              INSERT INTO medication_stock_movements (
+                medication_id, kind, delta_milli, required_milli,
+                occurrence_key, created_at
+              ) SELECT medication_id, 'legacy_confirmation', 0, 0,
+                medication_id || '|' || scheduled_date || '|' || scheduled_time,
+                COALESCE(confirmed_at, CURRENT_TIMESTAMP)
+              FROM medication_occurrences WHERE status = 'taken'
+            ''');
+          }
         },
       ),
     );
     return _database!;
   }
+
+  Future<void> _createStockTables(sqflite.DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE medication_stock (
+        medication_id INTEGER PRIMARY KEY REFERENCES medications(id) ON DELETE RESTRICT,
+        enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+        unit TEXT NOT NULL,
+        initial_milli INTEGER NOT NULL CHECK (initial_milli >= 0),
+        remaining_milli INTEGER NOT NULL CHECK (remaining_milli >= 0),
+        per_dose_milli INTEGER NOT NULL CHECK (per_dose_milli > 0),
+        threshold_milli INTEGER NOT NULL CHECK (threshold_milli >= 0),
+        reference_milli INTEGER NOT NULL CHECK (reference_milli >= 0)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE medication_stock_movements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE RESTRICT,
+        kind TEXT NOT NULL CHECK (kind IN ('initial', 'consumption', 'replenishment',
+          'correction', 'anomaly', 'resolution', 'inventory_reconciliation',
+          'untracked_confirmation', 'legacy_confirmation')),
+        delta_milli INTEGER NOT NULL,
+        required_milli INTEGER NOT NULL DEFAULT 0 CHECK (required_milli >= 0),
+        quantity_after_milli INTEGER CHECK (quantity_after_milli >= 0),
+        unit TEXT,
+        occurrence_key TEXT UNIQUE,
+        resolves_id INTEGER UNIQUE REFERENCES medication_stock_movements(id) ON DELETE RESTRICT,
+        created_at TEXT NOT NULL,
+        note TEXT
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX idx_stock_movements_medication ON medication_stock_movements(medication_id, id)',
+    );
+  }
+
+  Future<void> _createNotificationRegistry(sqflite.DatabaseExecutor db) =>
+      db.execute('''
+        CREATE TABLE medication_notification_registry (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          reminder_key TEXT NOT NULL UNIQUE,
+          signature TEXT
+        )
+      ''');
 
   Future<Medication> _loadMedication(
     sqflite.DatabaseExecutor database,
@@ -413,6 +843,7 @@ class MedicationRepository {
           );
     return Medication.fromMap({
       ...row,
+      'stock': await _loadStock(database, medicationId),
       'schedule_times': times.map((value) => value['time'] as String).toList(),
       'weekdays_mask': rule?['weekdays_mask'] as int? ?? 127,
     });

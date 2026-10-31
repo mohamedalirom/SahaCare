@@ -1,9 +1,12 @@
+import '../widgets/medication_scaffold.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/medication_repository.dart';
 import '../../domain/entities/medication.dart';
 import '../../domain/entities/medication_occurrence.dart';
+import '../widgets/medication_stock_section.dart';
 
 class MedicationDetailScreen extends StatefulWidget {
   const MedicationDetailScreen({super.key, this.medicationId, this.repository});
@@ -96,7 +99,8 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => MedicationScaffold(
+    manageNotifications: widget.repository == null,
     backgroundColor: const Color(0xFFF8FAFC),
     appBar: AppBar(
       leading: IconButton(
@@ -198,6 +202,13 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
               ),
             ),
             const SizedBox(height: 25),
+            MedicationStockSection(
+              medication: medication,
+              repository: _repository,
+              onConfigure: _edit,
+              onChanged: () => setState(() => _hasChanges = true),
+            ),
+            const SizedBox(height: 20),
             _informationCard(
               icon: Icons.science_outlined,
               title: 'Dosage',
