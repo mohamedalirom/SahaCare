@@ -19,6 +19,7 @@ import '../../features/auth/presentation/screens/signup_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/biometric_lock_screen.dart';
 import '../../features/auth/services/auth_service.dart';
+import '../config/supabase_config.dart';
 
 import '../../features/profil/presentation/screens/profile_screen.dart';
 import '../../features/profil/presentation/screens/edit_profile_screen.dart';
@@ -53,7 +54,7 @@ final shellKey5 = GlobalKey<NavigatorState>(debugLabel: 'shell5');
 /// Configuration principale du routeur avec GoRouter
 final GoRouter appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
-  initialLocation: '/profil',
+  initialLocation: SupabaseConfig.isDemoMode ? '/medications' : '/profil',
 
   // Se ré-évalue à chaque changement de session (connexion / déconnexion)
   refreshListenable: AuthService.instance,

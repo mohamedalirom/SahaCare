@@ -1,0 +1,105 @@
+{
+  "catalogDate": "2026-10-29",
+  "catalogNote": "Catalogue indicatif, sans classement ni recommandation de traitement. Les présentations sont des informations de référence et ne constituent pas une posologie personnelle.",
+  "sources": [
+    {
+      "name": "Base de Données Publique des Médicaments (BDPM), Ministère de la Santé et de la Prévention",
+      "url": "https://base-donnees-publique.medicaments.gouv.fr/telechargement",
+      "license": "Licence Ouverte / Open License 2.0 (Etalab), code fr-lo",
+      "retrievedAt": "2026-10-29"
+    },
+    {
+      "name": "RxNorm API, U.S. National Library of Medicine (NLM)",
+      "url": "https://rxnav.nlm.nih.gov/REST/",
+      "retrievedAt": "2026-10-29"
+    },
+    {
+      "name": "Amoxil name supplied in the feature request; no ingredient or presentation included without a verified source."
+    }
+  ],
+  "medications": [
+    {
+      "name": "Doliprane",
+      "activeIngredient": "Paracétamol",
+      "presentations": [
+        "100 mg • Suppositoire sécable",
+        "1 000 mg • Comprimé",
+        "1 000 mg • Comprimé effervescent sécable",
+        "1 000 mg • Gélule",
+        "1 000 mg • Poudre pour solution buvable"
+      ],
+      "source": "BDPM France — autorisation active et commercialisation déclarée"
+    },
+    {
+      "name": "Efferalgan",
+      "activeIngredient": "Paracétamol",
+      "presentations": [
+        "1 000 mg • Comprimé effervescent",
+        "1 000 mg • Comprimé pelliculé",
+        "150 mg • Poudre effervescente pour solution buvable",
+        "150 mg • Suppositoire",
+        "250 mg • Comprimé dispersible"
+      ],
+      "source": "BDPM France — autorisation active et commercialisation déclarée"
+    },
+    {
+      "name": "Panadol",
+      "activeIngredient": "Acetaminophen",
+      "searchTerms": ["Paracetamol", "Paracétamol"],
+      "presentations": [],
+      "source": "RxNorm (NLM) — brand concept; no regional availability claim"
+    },
+    {
+      "name": "Dafalgan",
+      "activeIngredient": "Paracétamol",
+      "presentations": [
+        "1 000 mg • Comprimé effervescent",
+        "1 000 mg • Comprimé pelliculé",
+        "500 mg • Comprimé",
+        "500 mg • Comprimé effervescent sécable"
+      ],
+      "source": "BDPM France — autorisation active et commercialisation déclarée"
+    },
+    {
+      "name": "Advil",
+      "activeIngredient": "Ibuprofène",
+      "presentations": [
+        "200 mg • Comprimé enrobé",
+        "400 mg • Comprimé enrobé"
+      ],
+      "source": "BDPM France — autorisation active et commercialisation déclarée"
+    },
+    {
+      "name": "Spasfon",
+      "activeIngredient": "Phloroglucinol (formes hydratée et anhydre)",
+      "presentations": [
+        "80 mg • Lyophilisat oral",
+        "160 mg • Lyophilisat oral"
+      ],
+      "source": "BDPM France — autorisation active et commercialisation déclarée"
+    },
+    {
+      "name": "Augmentin",
+      "activeIngredient": "Amoxicilline + acide clavulanique",
+      "presentations": [
+        "1 g/125 mg • Poudre pour suspension orale",
+        "100 mg/12,5 mg par ml • Poudre pour suspension buvable",
+        "500 mg/62,5 mg • Comprimé pelliculé"
+      ],
+      "source": "BDPM France — autorisation active et commercialisation déclarée"
+    },
+    {
+      "name": "Amoxil",
+      "presentations": [],
+      "source": "Nom fourni dans la demande; substance active et présentations non vérifiées"
+    },
+    {
+      "name": "Amoxicilline Almus",
+      "activeIngredient": "Amoxicilline",
+      "presentations": [
+        "1 g • Comprimé dispersible"
+      ],
+      "source": "BDPM France — autorisation active et commercialisation déclarée"
+    }
+  ]
+}

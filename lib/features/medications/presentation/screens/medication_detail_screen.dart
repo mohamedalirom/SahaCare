@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/medication_repository.dart';
 import '../../domain/entities/medication.dart';
+import '../../domain/entities/medication_occurrence.dart';
 
 class MedicationDetailScreen extends StatefulWidget {
   const MedicationDetailScreen({super.key, this.medicationId, this.repository});
@@ -18,6 +19,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   MedicationRepository get _repository =>
       widget.repository ?? MedicationRepository.instance;
   late Future<Medication?> _medication;
+  late Future<List<MedicationOccurrence>> _occurrences;
   bool _deleting = false;
   bool _hasChanges = false;
 
@@ -25,12 +27,19 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   void initState() {
     super.initState();
     _medication = _loadMedication();
+    _occurrences = _loadOccurrences();
   }
 
   Future<Medication?> _loadMedication() {
     final id = widget.medicationId;
     if (id == null) return Future.value(null);
     return _repository.getById(id);
+  }
+
+  Future<List<MedicationOccurrence>> _loadOccurrences() {
+    final id = widget.medicationId;
+    if (id == null) return Future.value(const []);
+    return _repository.getOccurrencesForMedication(id);
   }
 
   Future<void> _edit() async {
@@ -41,6 +50,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
       setState(() {
         _hasChanges = true;
         _medication = _loadMedication();
+        _occurrences = _loadOccurrences();
       });
     }
   }
@@ -155,6 +165,22 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
               ),
             ),
             const SizedBox(height: 20),
+            if (medication.activeIngredient case final ingredient?) ...[
+              _informationCard(
+                icon: Icons.science_outlined,
+                title: 'Substance active',
+                value: ingredient,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (medication.commercialPresentation case final presentation?) ...[
+              _informationCard(
+                icon: Icons.medication_outlined,
+                title: 'Présentation commerciale',
+                value: presentation,
+              ),
+              const SizedBox(height: 12),
+            ],
             OutlinedButton.icon(
               onPressed: _edit,
               style: OutlinedButton.styleFrom(
@@ -180,8 +206,18 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
             const SizedBox(height: 12),
             _informationCard(
               icon: Icons.access_time,
-              title: 'Horaire de prise',
-              value: medication.time,
+              title: 'Horaires de prise',
+              value:
+                  (medication.scheduleTimes.isEmpty
+                          ? [medication.time]
+                          : medication.scheduleTimes)
+                      .join(' • '),
+            ),
+            const SizedBox(height: 12),
+            _informationCard(
+              icon: Icons.calendar_view_week_outlined,
+              title: 'Jours de prise',
+              value: _formatWeekdays(medication.weekdaysMask),
             ),
             const SizedBox(height: 12),
             _informationCard(
@@ -193,8 +229,12 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
             _informationCard(
               icon: Icons.event_outlined,
               title: 'Date de fin',
-              value: _formatDate(medication.endDate),
+              value: medication.endDate == null
+                  ? 'Sans date de fin'
+                  : _formatDate(medication.endDate!),
             ),
+            const SizedBox(height: 20),
+            _occurrenceHistory(),
             const SizedBox(height: 12),
             _informationCard(
               icon: Icons.notifications_outlined,
@@ -281,4 +321,65 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   String _formatDate(DateTime date) =>
       '${date.day.toString().padLeft(2, '0')}/'
       '${date.month.toString().padLeft(2, '0')}/${date.year}';
+
+  String _formatWeekdays(int mask) {
+    const labels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    final selected = [
+      for (var index = 0; index < labels.length; index++)
+        if (mask & (1 << index) != 0) labels[index],
+    ];
+    return selected.join(', ');
+  }
+
+  Widget _occurrenceHistory() => FutureBuilder<List<MedicationOccurrence>>(
+    future: _occurrences,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return const Text(
+          'Impossible de charger l’historique des prises.',
+          style: TextStyle(color: Color(0xFFB91C1C)),
+        );
+      }
+      if (!snapshot.hasData) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(12),
+            child: CircularProgressIndicator(),
+          ),
+        );
+      }
+      final occurrences = snapshot.data!;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Historique des prises',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (occurrences.isEmpty)
+            const Text(
+              'Aucune prise enregistrée pour le moment.',
+              style: TextStyle(color: Color(0xFF64748B)),
+            )
+          else
+            ...occurrences.map(
+              (occurrence) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _informationCard(
+                  icon: Icons.history,
+                  title:
+                      '${_formatDate(occurrence.effectiveDate)} • ${occurrence.effectiveTime}',
+                  value: occurrence.statusLabel(),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
+  );
 }

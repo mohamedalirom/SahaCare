@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../data/medication_repository.dart';
 import '../../domain/entities/medication.dart';
 
+enum _MedicationFilter { active, completed, all }
+
 class MedicationsDashboardScreen extends StatefulWidget {
   const MedicationsDashboardScreen({super.key, this.repository});
 
@@ -19,6 +21,7 @@ class _MedicationsDashboardScreenState
   MedicationRepository get _repository =>
       widget.repository ?? MedicationRepository.instance;
   late Future<List<Medication>> _medications;
+  _MedicationFilter _filter = _MedicationFilter.all;
 
   @override
   void initState() {
@@ -63,14 +66,36 @@ class _MedicationsDashboardScreenState
 
           final medications = snapshot.data!;
           final today = DateUtils.dateOnly(DateTime.now());
-          final todaysMedications = medications.where((medication) {
-            final start = DateUtils.dateOnly(medication.startDate);
-            final end = DateUtils.dateOnly(medication.endDate);
-            return !today.isBefore(start) && !today.isAfter(end);
-          }).toList()..sort(_compareSchedule);
+          final todaysMedications =
+              medications
+                  .where(
+                    (medication) =>
+                        medication.isActiveOn(today) &&
+                        medication.weekdaysMask & (1 << (today.weekday - 1)) !=
+                            0,
+                  )
+                  .toList()
+                ..sort(_compareSchedule);
+          final todaysDoses = <MapEntry<Medication, String>>[
+            for (final medication in todaysMedications)
+              for (final time in _timesFor(medication))
+                MapEntry(medication, time),
+          ]..sort((first, second) => first.value.compareTo(second.value));
+          final visibleMedications = medications.where((medication) {
+            final endDate = medication.endDate == null
+                ? null
+                : DateUtils.dateOnly(medication.endDate!);
+            return switch (_filter) {
+              _MedicationFilter.active =>
+                endDate == null || !today.isAfter(endDate),
+              _MedicationFilter.completed =>
+                endDate != null && today.isAfter(endDate),
+              _MedicationFilter.all => true,
+            };
+          }).toList();
 
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 184),
             children: [
               const Text(
                 'Mes traitements',
@@ -86,15 +111,45 @@ class _MedicationsDashboardScreenState
                 style: TextStyle(fontSize: 15, color: Color(0xFF64748B)),
               ),
               const SizedBox(height: 25),
-              _sectionTitle('Tous mes médicaments'),
+              SegmentedButton<_MedicationFilter>(
+                segments: const [
+                  ButtonSegment(
+                    value: _MedicationFilter.active,
+                    label: Text('Actifs'),
+                  ),
+                  ButtonSegment(
+                    value: _MedicationFilter.completed,
+                    label: Text('Terminés'),
+                  ),
+                  ButtonSegment(
+                    value: _MedicationFilter.all,
+                    label: Text('Tous'),
+                  ),
+                ],
+                selected: {_filter},
+                onSelectionChanged: (selection) =>
+                    setState(() => _filter = selection.first),
+              ),
+              const SizedBox(height: 20),
+              _calendarCard(onTap: () => _open('/medications/schedule')),
+              const SizedBox(height: 22),
+              _sectionTitle(switch (_filter) {
+                _MedicationFilter.active => 'Traitements actifs',
+                _MedicationFilter.completed => 'Traitements terminés',
+                _MedicationFilter.all => 'Tous mes médicaments',
+              }),
               const SizedBox(height: 15),
-              if (medications.isEmpty)
+              if (visibleMedications.isEmpty)
                 _emptyState(
-                  'Aucun médicament enregistré',
-                  'Ajoutez un traitement pour le retrouver ici.',
+                  _filter == _MedicationFilter.completed
+                      ? 'Aucun traitement terminé'
+                      : 'Aucun médicament enregistré',
+                  _filter == _MedicationFilter.completed
+                      ? 'Les traitements terminés resteront consultables ici.'
+                      : 'Ajoutez un traitement pour le retrouver ici.',
                 )
               else
-                ...medications.map(
+                ...visibleMedications.map(
                   (medication) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _MedicationCard(
@@ -107,16 +162,19 @@ class _MedicationsDashboardScreenState
               const SizedBox(height: 18),
               _sectionTitle('Aujourd’hui'),
               const SizedBox(height: 15),
-              if (todaysMedications.isEmpty)
+              if (todaysDoses.isEmpty)
                 _emptyState(
                   'Aucune prise prévue aujourd’hui',
                   'Les traitements actifs à cette date apparaîtront ici.',
                 )
               else
-                ...todaysMedications.map(
-                  (medication) => Padding(
+                ...todaysDoses.map(
+                  (dose) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _TodayMedicationCard(medication: medication),
+                    child: _TodayMedicationCard(
+                      medication: dose.key,
+                      time: dose.value,
+                    ),
                   ),
                 ),
               const SizedBox(height: 18),
@@ -149,8 +207,83 @@ class _MedicationsDashboardScreenState
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
+
+  Widget _calendarCard({required VoidCallback onTap}) => Material(
+    color: Colors.transparent,
+    borderRadius: BorderRadius.circular(20),
+    child: Ink(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0D9488), Color(0xFF0F766E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0D9488).withValues(alpha: 0.16),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: InkWell(
+        key: const ValueKey('open-medication-calendar'),
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(17),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.calendar_month_rounded,
+                  color: Colors.white,
+                  size: 25,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Mon calendrier thérapeutique',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Consultez vos prises par jour, semaine ou mois',
+                      style: TextStyle(color: Color(0xFFD9F6F1), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Colors.white,
+                size: 17,
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 
   Widget _loadError() => Center(
     child: Padding(
@@ -270,7 +403,12 @@ class _MedicationsDashboardScreenState
   );
 
   int _compareSchedule(Medication first, Medication second) =>
-      first.time.compareTo(second.time);
+      _timesFor(first).first.compareTo(_timesFor(second).first);
+
+  List<String> _timesFor(Medication medication) =>
+      medication.scheduleTimes.isEmpty
+      ? [medication.time]
+      : medication.scheduleTimes;
 }
 
 class _MedicationCard extends StatelessWidget {
@@ -316,9 +454,32 @@ class _MedicationCard extends StatelessWidget {
                       color: Color(0xFF0F172A),
                     ),
                   ),
+                  if (medication.activeIngredient case final ingredient?)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        'Substance active : $ingredient',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                  if (medication.commercialPresentation
+                      case final presentation?)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        'Présentation : $presentation',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 5),
                   Text(
-                    '${medication.dosage} • ${medication.time}',
+                    '${medication.dosage} • ${_scheduleTimes(medication)}',
                     style: const TextStyle(
                       fontSize: 15,
                       color: Color(0xFF64748B),
@@ -333,12 +494,19 @@ class _MedicationCard extends StatelessWidget {
       ),
     ),
   );
+
+  String _scheduleTimes(Medication medication) =>
+      (medication.scheduleTimes.isEmpty
+              ? [medication.time]
+              : medication.scheduleTimes)
+          .join(' • ');
 }
 
 class _TodayMedicationCard extends StatelessWidget {
-  const _TodayMedicationCard({required this.medication});
+  const _TodayMedicationCard({required this.medication, required this.time});
 
   final Medication medication;
+  final String time;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -361,7 +529,7 @@ class _TodayMedicationCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${medication.time} • ${medication.name}',
+                '$time • ${medication.name}',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,

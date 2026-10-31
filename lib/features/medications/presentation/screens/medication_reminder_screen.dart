@@ -214,7 +214,7 @@ class _ReminderCard extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${medication.dosage} • ${medication.time}',
+                '${medication.dosage} • ${(medication.scheduleTimes.isEmpty ? [medication.time] : medication.scheduleTimes).join(' • ')}',
                 style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
               ),
             ],
