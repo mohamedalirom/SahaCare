@@ -8,6 +8,7 @@ import '../widgets/measurement_type_picker_sheet.dart';
 import '../widgets/metric_summary_card.dart';
 import '../widgets/health_palette.dart';
 import '../widgets/phone_frame_insets.dart';
+import '../widgets/saha_intelligence_entry.dart';
 
 /// Écran tableau de bord principal du module : Suivi de santé
 class HealthDashboardScreen extends StatelessWidget {
@@ -109,6 +110,8 @@ class HealthDashboardScreen extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 12),
+        const SahaIntelligenceEntry(),
         const SizedBox(height: 20),
 
         _SectionHeader(

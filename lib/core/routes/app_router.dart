@@ -33,10 +33,12 @@ import '../../features/medications/presentation/screens/medication_reminder_scre
 
 import '../../features/health_tracking/domain/entities/health_measurement.dart';
 import '../../features/health_tracking/presentation/screens/add_measurement_screen.dart';
+import '../../features/health_tracking/presentation/screens/connected_watch_screen.dart';
 import '../../features/health_tracking/presentation/screens/health_dashboard_screen.dart';
 import '../../features/health_tracking/presentation/screens/health_statistics_screen.dart';
 import '../../features/health_tracking/presentation/screens/measurement_detail_screen.dart';
 import '../../features/health_tracking/presentation/screens/measurement_history_screen.dart';
+import '../../features/health_tracking/presentation/screens/saha_intelligence_screen.dart';
 
 import '../../features/medical_documents/presentation/screens/home_documents_page.dart';
 
@@ -285,6 +287,18 @@ final GoRouter appRouter = GoRouter(
                   name: 'health-statistics',
                   parentNavigatorKey: rootNavigatorKey,
                   builder: (context, state) => const HealthStatisticsScreen(),
+                ),
+                GoRoute(
+                  path: 'intelligence',
+                  name: 'health-intelligence',
+                  parentNavigatorKey: rootNavigatorKey,
+                  builder: (context, state) => const SahaIntelligenceScreen(),
+                ),
+                GoRoute(
+                  path: 'watch',
+                  name: 'health-watch',
+                  parentNavigatorKey: rootNavigatorKey,
+                  builder: (context, state) => const ConnectedWatchScreen(),
                 ),
                 GoRoute(
                   path: ':type',
