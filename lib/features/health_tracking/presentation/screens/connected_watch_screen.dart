@@ -10,7 +10,8 @@ import '../widgets/watch_alert_banner.dart';
 
 /// Écran « Montre connectée » : flux de fréquence cardiaque en direct,
 /// comparé à la référence personnelle de l'utilisateur.
-/// La montre est simulée : aucune montre réelle n'est appairée.
+/// Deux origines : une vraie montre lue en Bluetooth (capteur cardiaque standard)
+/// ou une montre simulée pour la démonstration.
 class ConnectedWatchScreen extends ConsumerWidget {
   const ConnectedWatchScreen({super.key});
 
@@ -37,6 +38,30 @@ class ConnectedWatchScreen extends ConsumerWidget {
               ),
               child: Column(
                 children: [
+                  // Origine des valeurs : vraie montre (Bluetooth) ou simulation
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<WatchSource>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                          value: WatchSource.real,
+                          icon: Icon(Icons.bluetooth_rounded, size: 18),
+                          label: Text('Montre réelle'),
+                        ),
+                        ButtonSegment(
+                          value: WatchSource.simulated,
+                          icon: Icon(Icons.science_outlined, size: 18),
+                          label: Text('Simulation'),
+                        ),
+                      ],
+                      selected: {watch.source},
+                      onSelectionChanged: watch.connected || watch.connecting
+                          ? null
+                          : (selection) => notifier.selectSource(selection.first),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   Row(
                     children: [
                       Icon(Icons.watch_rounded, color: watch.connected ? color : context.healthTextSecondary),
@@ -46,11 +71,15 @@ class ConnectedWatchScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'SahaWatch (simulation)',
+                              watch.isReal ? (watch.deviceName ?? 'Capteur cardiaque Bluetooth') : 'SahaWatch (simulation)',
                               style: TextStyle(fontWeight: FontWeight.w600, color: context.healthText),
                             ),
                             Text(
-                              watch.connected ? 'Connectée · réception en direct' : 'Non connectée',
+                              watch.connecting
+                                  ? 'Recherche du capteur…'
+                                  : watch.connected
+                                  ? 'Connectée · réception en direct'
+                                  : 'Non connectée',
                               style: TextStyle(fontSize: 12, color: context.healthTextSecondary),
                             ),
                           ],
@@ -58,10 +87,32 @@ class ConnectedWatchScreen extends ConsumerWidget {
                       ),
                       Switch(
                         value: watch.connected,
-                        onChanged: (on) => on ? notifier.connect() : notifier.disconnect(),
+                        onChanged: watch.connecting
+                            ? null
+                            : (on) {
+                                if (!on) {
+                                  notifier.disconnect();
+                                } else if (watch.isReal) {
+                                  notifier.connectReal();
+                                } else {
+                                  notifier.connect();
+                                }
+                              },
                       ),
                     ],
                   ),
+                  if (watch.error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(watch.error!, style: const TextStyle(fontSize: 12, color: Color(0xFFDC2626), height: 1.3)),
+                  ],
+                  if (watch.isReal && !watch.connected && watch.error == null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Lancez la diffusion de la fréquence cardiaque sur la montre, activez la connexion, puis '
+                      'choisissez le capteur dans la fenêtre du navigateur.',
+                      style: TextStyle(fontSize: 12, color: context.healthTextSecondary, height: 1.3),
+                    ),
+                  ],
                   const SizedBox(height: 18),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -99,12 +150,14 @@ class ConnectedWatchScreen extends ConsumerWidget {
               const SizedBox(height: 14),
             ],
 
-            FilledButton.tonalIcon(
-              onPressed: watch.connected ? notifier.simulateSpike : null,
-              icon: const Icon(Icons.bolt_rounded),
-              label: const Text('Simuler un pic de fréquence cardiaque'),
-            ),
-            const SizedBox(height: 14),
+            if (!watch.isReal) ...[
+              FilledButton.tonalIcon(
+                onPressed: watch.connected ? notifier.simulateSpike : null,
+                icon: const Icon(Icons.bolt_rounded),
+                label: const Text('Simuler un pic de fréquence cardiaque'),
+              ),
+              const SizedBox(height: 14),
+            ],
 
             Container(
               padding: const EdgeInsets.all(14),

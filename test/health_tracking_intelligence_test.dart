@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:sahacare/features/health_tracking/data/datasources/health_measurement_local_datasource.dart';
+import 'package:sahacare/features/health_tracking/data/datasources/heart_rate_sensor.dart';
 import 'package:sahacare/features/health_tracking/data/datasources/hugging_face_service.dart';
 import 'package:sahacare/features/health_tracking/data/models/health_measurement_model.dart';
 import 'package:sahacare/features/health_tracking/domain/entities/health_insight.dart';
@@ -50,6 +51,36 @@ class _InMemoryDataSource implements HealthMeasurementLocalDataSource {
 
   @override
   Future<void> deleteMeasurement(String userId, String id) async => rows.remove(id);
+}
+
+/// Capteur Bluetooth factice : les valeurs sont injectées par le test
+class _FakeSensor implements HeartRateSensor {
+  final List<double> pending = [];
+  bool connected = false;
+  bool fail = false;
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  bool get isConnected => connected;
+
+  @override
+  Future<String> connect() async {
+    if (fail) throw Exception('aucun capteur choisi');
+    connected = true;
+    return 'Apple Watch';
+  }
+
+  @override
+  void disconnect() => connected = false;
+
+  @override
+  List<double> drain() {
+    final values = [...pending];
+    pending.clear();
+    return values;
+  }
 }
 
 http.Response _hfAnswer(String content) => http.Response.bytes(
@@ -297,6 +328,49 @@ void main() {
   });
 
   group('Montre connectée', () {
+    test('vraie montre : lit le capteur Bluetooth, alerte, puis gère la déconnexion', () async {
+      final sensor = _FakeSensor();
+      final c = ProviderContainer(
+        overrides: [
+          healthMeasurementLocalDataSourceProvider.overrideWithValue(_InMemoryDataSource(_steadyHeartRate())),
+          heartRateSensorProvider.overrideWithValue(sensor),
+        ],
+      );
+      addTearDown(c.dispose);
+      await c.read(healthMeasurementsProvider.future);
+      final watch = c.read(connectedWatchProvider.notifier);
+
+      // Aucun capteur choisi dans le navigateur : message d'erreur, pas de connexion
+      sensor.fail = true;
+      await watch.connectReal();
+      expect(c.read(connectedWatchProvider).connected, isFalse);
+      expect(c.read(connectedWatchProvider).error, isNotNull);
+
+      sensor.fail = false;
+      await watch.connectReal();
+      addTearDown(watch.disconnect);
+      var state = c.read(connectedWatchProvider);
+      expect(state.connected, isTrue);
+      expect(state.isReal, isTrue);
+      expect(state.deviceName, 'Apple Watch');
+
+      sensor.pending.addAll([71, 73, 118, 121]);
+      watch.pollSensor();
+      await Future<void>.delayed(Duration.zero);
+      state = c.read(connectedWatchProvider);
+      expect(state.readings, [71, 73, 118, 121]);
+      expect(state.alert?.bpm, 121);
+      expect(state.savedCount, 1);
+
+      // Le bouton de démonstration n'agit pas sur une vraie montre
+      watch.simulateSpike();
+      sensor.connected = false;
+      watch.pollSensor();
+      state = c.read(connectedWatchProvider);
+      expect(state.connected, isFalse);
+      expect(state.error, contains('déconnectée'));
+    });
+
     test('détecte un pic, alerte une seule fois et enregistre la mesure', () async {
       final source = _InMemoryDataSource(_steadyHeartRate());
       final c = ProviderContainer(overrides: [healthMeasurementLocalDataSourceProvider.overrideWithValue(source)]);

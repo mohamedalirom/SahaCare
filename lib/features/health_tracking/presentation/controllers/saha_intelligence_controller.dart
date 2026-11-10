@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/datasources/heart_rate_sensor.dart';
 import '../../data/datasources/hugging_face_service.dart';
 import '../../domain/entities/health_insight.dart';
 import '../../domain/entities/health_measurement.dart';
@@ -269,8 +270,23 @@ class WatchAlert {
   const WatchAlert({required this.bpm, required this.at, required this.baseline});
 }
 
+/// Origine des valeurs : capteur simulé ou vraie montre lue en Bluetooth
+enum WatchSource { simulated, real }
+
+final heartRateSensorProvider = Provider<HeartRateSensor>((ref) => createHeartRateSensor());
+
 class WatchState {
   final bool connected;
+  final WatchSource source;
+
+  /// Nom du capteur Bluetooth connecté (vraie montre)
+  final String? deviceName;
+
+  /// Recherche d'un capteur Bluetooth en cours
+  final bool connecting;
+
+  /// Dernier problème de connexion à afficher
+  final String? error;
 
   /// Dernières valeurs reçues (bpm), de la plus ancienne à la plus récente
   final List<double> readings;
@@ -282,6 +298,10 @@ class WatchState {
 
   const WatchState({
     this.connected = false,
+    this.source = WatchSource.simulated,
+    this.deviceName,
+    this.connecting = false,
+    this.error,
     this.readings = const [],
     this.baseline,
     this.alert,
@@ -290,8 +310,14 @@ class WatchState {
 
   double? get current => readings.isEmpty ? null : readings.last;
 
+  bool get isReal => source == WatchSource.real;
+
   WatchState copyWith({
     bool? connected,
+    WatchSource? source,
+    String? Function()? deviceName,
+    bool? connecting,
+    String? Function()? error,
     List<double>? readings,
     LiveBaseline? Function()? baseline,
     WatchAlert? Function()? alert,
@@ -299,6 +325,10 @@ class WatchState {
   }) {
     return WatchState(
       connected: connected ?? this.connected,
+      source: source ?? this.source,
+      deviceName: deviceName != null ? deviceName() : this.deviceName,
+      connecting: connecting ?? this.connecting,
+      error: error != null ? error() : this.error,
       readings: readings ?? this.readings,
       baseline: baseline != null ? baseline() : this.baseline,
       alert: alert != null ? alert() : this.alert,
@@ -328,30 +358,84 @@ class ConnectedWatchNotifier extends Notifier<WatchState> {
   @override
   WatchState build() {
     ref.onDispose(() => _timer?.cancel());
+    final sensor = ref.read(heartRateSensorProvider);
+    ref.onDispose(sensor.disconnect);
     return const WatchState();
   }
 
-  void connect() {
-    if (state.connected) return;
+  LiveBaseline _startSession() {
     final all = ref.read(healthMeasurementsProvider).value ?? const <HealthMeasurement>[];
-    final baseline = ref.read(healthAnalysisEngineProvider).heartRateBaseline(all);
     _ticks = 0;
     _spikeLeft = 0;
     _unusualStreak = 0;
     _episodeSaved = false;
+    return ref.read(healthAnalysisEngineProvider).heartRateBaseline(all);
+  }
+
+  /// Choix de l'origine des valeurs (uniquement quand la montre est déconnectée)
+  void selectSource(WatchSource source) {
+    if (state.connected || state.connecting) return;
+    state = state.copyWith(source: source, error: () => null);
+  }
+
+  /// Connecte la montre simulée
+  void connect() {
+    if (state.connected) return;
+    final baseline = _startSession();
     state = WatchState(connected: true, baseline: baseline, readings: [baseline.mean.roundToDouble()]);
     _timer = Timer.periodic(tick, (_) => receive(_nextValue()));
+  }
+
+  /// Connecte une vraie montre : capteur de fréquence cardiaque Bluetooth choisi dans le navigateur
+  Future<void> connectReal() async {
+    if (state.connected || state.connecting) return;
+    final sensor = ref.read(heartRateSensorProvider);
+    if (!sensor.isSupported) {
+      state = state.copyWith(
+        source: WatchSource.real,
+        error: () => 'Bluetooth indisponible dans ce navigateur. Utilisez Chrome sur un ordinateur équipé du Bluetooth.',
+      );
+      return;
+    }
+    state = state.copyWith(source: WatchSource.real, connecting: true, error: () => null);
+    try {
+      final name = await sensor.connect();
+      if (!ref.mounted) return;
+      final baseline = _startSession();
+      state = WatchState(connected: true, source: WatchSource.real, deviceName: name, baseline: baseline);
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) => pollSensor());
+    } catch (_) {
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        connecting: false,
+        error: () => 'Aucun capteur connecté. Vérifiez que la diffusion est lancée sur la montre, puis réessayez.',
+      );
+    }
+  }
+
+  /// Récupère les valeurs envoyées par la vraie montre depuis la dernière lecture
+  void pollSensor() {
+    if (!state.connected || !state.isReal) return;
+    final sensor = ref.read(heartRateSensorProvider);
+    for (final bpm in sensor.drain()) {
+      receive(bpm);
+    }
+    if (!sensor.isConnected) {
+      disconnect();
+      state = state.copyWith(error: () => 'La montre s\'est déconnectée.');
+    }
   }
 
   void disconnect() {
     _timer?.cancel();
     _timer = null;
-    state = state.copyWith(connected: false);
+    if (state.isReal) ref.read(heartRateSensorProvider).disconnect();
+    state = state.copyWith(connected: false, connecting: false);
   }
 
-  /// Démonstration : la montre envoie des valeurs anormalement élevées pendant quelques secondes
+  /// Démonstration : la montre simulée envoie des valeurs anormalement élevées pendant quelques secondes
   void simulateSpike() {
-    if (state.connected) _spikeLeft = spikeTicks;
+    if (state.connected && !state.isReal) _spikeLeft = spikeTicks;
   }
 
   void dismissAlert() => state = state.copyWith(alert: () => null);
@@ -384,7 +468,7 @@ class ConnectedWatchNotifier extends Notifier<WatchState> {
       _episodeSaved = true;
       state = state.copyWith(alert: () => WatchAlert(bpm: bpm, at: DateTime.now(), baseline: baseline));
       _save(bpm, 'Montre connectée · valeur inhabituelle détectée');
-    } else if (!unusual && _ticks % saveEvery == 0) {
+    } else if (!unusual && _ticks % (state.isReal ? saveEvery * 2 : saveEvery) == 0) {
       _save(bpm, 'Montre connectée');
     }
   }
