@@ -1,3 +1,5 @@
+import 'helpers/medication_test_access.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -54,6 +56,7 @@ void main() {
         ),
       ),
     );
+    await tester.ensureVisible(find.byKey(const ValueKey('stock-replenish')));
     await tester.tap(find.byKey(const ValueKey('stock-replenish')));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -68,7 +71,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('5 comprimé(s)'), findsOneWidget);
     expect(find.textContaining('à régulariser'), findsOneWidget);
+    // Let the transient success snackbar dismiss before the next action.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
     changed = Completer<void>();
+    await tester.ensureVisible(find.text('Corriger la quantité'));
     await tester.tap(find.text('Corriger la quantité'));
     await tester.runAsync(() async {
       await repo.stockMovements(medication.id!);
@@ -114,6 +121,7 @@ void main() {
 }
 
 class _StockRepository extends MedicationRepository {
+  _StockRepository() : super(access: testMedicationAccess());
   late Medication medication;
   List<int> reconciledIds = [];
   bool resolved = false;

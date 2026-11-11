@@ -32,6 +32,8 @@ void main() {
   testWidgets(
     'stock gauge shows exact quantities and turquoise orange red states',
     (tester) async {
+      final gaugeFinder = find.byKey(const ValueKey('stock-gauge'));
+      double? previousValue;
       for (final entry in [
         ('8.5', const Color(0xFF0D9488)),
         ('2', const Color(0xFFD97706)),
@@ -40,11 +42,24 @@ void main() {
         await tester.pumpWidget(
           host(MedicationStockCard(stock: stock(entry.$1))),
         );
-        final gauge = tester.widget<LinearProgressIndicator>(
-          find.byKey(const ValueKey('stock-gauge')),
-        );
+        final target = q(entry.$1).milliUnits / 10000;
+        if (previousValue != null) {
+          expect(
+            tester.widget<LinearProgressIndicator>(gaugeFinder).value,
+            closeTo(previousValue, 0.000001),
+          );
+          await tester.pump(const Duration(milliseconds: 210));
+          final intermediate = tester
+              .widget<LinearProgressIndicator>(gaugeFinder)
+              .value!;
+          expect(intermediate, greaterThan(target));
+          expect(intermediate, lessThan(previousValue));
+        }
+        await tester.pumpAndSettle();
+        final gauge = tester.widget<LinearProgressIndicator>(gaugeFinder);
         expect(gauge.color, entry.$2);
-        expect(gauge.value, q(entry.$1).milliUnits / 10000);
+        expect(gauge.value, closeTo(target, 0.000001));
+        previousValue = target;
         expect(find.text('${q(entry.$1).display} comprimé(s)'), findsOneWidget);
       }
       await tester.pumpWidget(

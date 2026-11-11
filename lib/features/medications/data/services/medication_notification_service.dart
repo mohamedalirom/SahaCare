@@ -7,6 +7,8 @@ import '../medication_repository.dart';
 import '../../domain/entities/medication_occurrence.dart';
 import '../../domain/services/medication_reminder_planner.dart';
 import 'medication_notification_backend.dart';
+import 'medication_access.dart';
+import 'medication_notification_cleanup_store.dart';
 
 enum MedicationNotificationStatus {
   unsupported,
@@ -36,7 +38,9 @@ class MedicationNotificationService
     required this.repository,
     required this.backend,
     DateTime Function()? now,
+    MedicationNotificationCleanupStore? cleanupStore,
   }) : _now = now ?? DateTime.now,
+       cleanupStore = cleanupStore ?? PreferencesMedicationCleanupStore(),
        super(
          const MedicationNotificationState(
            MedicationNotificationStatus.checking,
@@ -52,6 +56,9 @@ class MedicationNotificationService
   final MedicationRepository repository;
   final MedicationNotificationBackend backend;
   final DateTime Function() _now;
+  final MedicationNotificationCleanupStore cleanupStore;
+  int? _activeGeneration;
+  final Set<int> _knownIds = {};
   Future<void> _tail = Future.value();
   bool _started = false;
   bool _foreground = true;
@@ -61,7 +68,16 @@ class MedicationNotificationService
     if (_started) return;
     _started = true;
     repository.onChanged = synchronize;
+    repository.access.addListener(_sessionChanged);
     WidgetsBinding.instance.addObserver(this);
+    unawaited(synchronize());
+  }
+
+  void _sessionChanged() {
+    value = const MedicationNotificationState(
+      MedicationNotificationStatus.checking,
+      'Changement de session : protection des rappels…',
+    );
     unawaited(synchronize());
   }
 
@@ -78,14 +94,24 @@ class MedicationNotificationService
     bool requestPermission = false,
     bool requestExact = false,
   }) {
+    MedicationLease? requested;
+    try {
+      requested = repository.access.capture();
+    } on MedicationAccessDenied {
+      /* Only cleanup may run without a lease. */
+    }
     final result = _tail.then(
-      (_) => _synchronize(requestPermission, requestExact),
+      (_) => _synchronize(requestPermission, requestExact, requested),
     );
     _tail = result;
     return result;
   }
 
-  Future<void> _synchronize(bool requestPermission, bool requestExact) async {
+  Future<void> _synchronize(
+    bool requestPermission,
+    bool requestExact,
+    MedicationLease? requested,
+  ) async {
     if (!backend.supported) {
       value = MedicationNotificationState(
         MedicationNotificationStatus.unsupported,
@@ -97,22 +123,64 @@ class MedicationNotificationService
     }
     var count = 0;
     try {
+      await repository.access.ensureReady();
+      MedicationLease? lease;
+      try {
+        lease = requested ?? repository.access.capture();
+        lease.check();
+      } on MedicationAccessDenied {
+        lease = null; // cleanup is still required, but never schedule for a replacement account.
+      }
       value = const MedicationNotificationState(
         MedicationNotificationStatus.checking,
         'Synchronisation des rappels…',
       );
       await backend.initialize();
+      final initialPending = await backend.pending();
+      _knownIds.addAll(await cleanupStore.read());
+      if (lease == null || _activeGeneration != lease.generation) {
+        final ids = {
+          ..._knownIds,
+          for (final item in initialPending)
+            if (item.payload?.startsWith('sahacare.medication:') == true)
+              item.id,
+        };
+        for (final id in ids) {
+          if (initialPending.any(
+            (p) =>
+                p.id == id &&
+                p.payload?.startsWith('sahacare.medication:') != true,
+          )) {
+            throw StateError('Identifiant utilisé par un autre module.');
+          }
+          await backend.cancel(id);
+        }
+        _knownIds.clear();
+        await cleanupStore.write({});
+        _activeGeneration = lease?.generation;
+      }
+      if (lease == null) {
+        value = const MedicationNotificationState(
+          MedicationNotificationStatus.denied,
+          'Connectez-vous pour activer les rappels.',
+        );
+        return;
+      }
+      lease.check();
       final permission = await backend.permissions(
         request: requestPermission,
         requestExact: requestExact,
       );
+      lease.check();
       final pending = await backend.pending();
+      lease.check();
       final ownPending = {
         for (final item in pending)
           if (item.payload?.startsWith('sahacare.medication:') == true)
             item.id: item,
       };
       final registry = await repository.notificationRegistry();
+      lease.check();
       final registered = {
         for (final row in registry) 1000000000 + (row['id'] as int): row,
       };
@@ -145,12 +213,15 @@ class MedicationNotificationService
         return;
       }
       final location = await backend.location();
+      lease.check();
       final medications = await repository.getAll();
+      lease.check();
       final occurrences = <MedicationOccurrence>[];
       for (final medication in medications) {
         occurrences.addAll(
           await repository.getOccurrencesForMedication(medication.id!),
         );
+        lease.check();
       }
       final otherCount = pending.length - ownPending.length;
       final capacity = backend.isIOS ? (60 - otherCount).clamp(0, 60) : 200;
@@ -163,7 +234,9 @@ class MedicationNotificationService
       );
       final desired = <int, MedicationReminder>{};
       for (final reminder in plan.reminders) {
+        lease.check();
         final id = await repository.notificationId(reminder.key);
+        lease.check();
         if (pending.any(
           (p) =>
               p.id == id &&
@@ -171,7 +244,11 @@ class MedicationNotificationService
         )) {
           throw StateError('Identifiant utilisé par un autre module.');
         }
-        desired[id] = reminder;
+        desired[id] = MedicationReminder(
+          key: reminder.key,
+          at: reminder.at,
+          scope: lease.notificationScope,
+        );
       }
       // Cancel obsolete dates first; never use cancelAll (other modules).
       for (final id in {
@@ -180,6 +257,7 @@ class MedicationNotificationService
             .where((e) => e.value['signature'] != null)
             .map((e) => e.key),
       }) {
+        lease.check();
         if (!desired.containsKey(id)) {
           if (pending.any(
             (p) =>
@@ -195,6 +273,7 @@ class MedicationNotificationService
         }
       }
       for (final entry in desired.entries) {
+        lease.check();
         final modeSignature = '${entry.value.signature}|${permission.exact}';
         // An OS request without an acknowledged journal row is replayed safely
         // with the same ID (replace, not duplicate).
@@ -206,15 +285,21 @@ class MedicationNotificationService
             await backend.cancel(entry.key);
           }
           await repository.recordNotification(entry.key, null);
+          lease.check();
+          _knownIds.add(entry.key);
+          await cleanupStore.write(_knownIds);
+          lease.check();
           await backend.schedule(
             entry.key,
             entry.value,
             exact: permission.exact,
           );
+          lease.check();
           await repository.recordNotification(entry.key, modeSignature);
         }
         count++;
       }
+      lease.check();
       final until = plan.reminders.isEmpty
           ? ''
           : ' Prochaine réserve jusqu’au ${plan.reminders.last.at.day}/${plan.reminders.last.at.month} à ${plan.reminders.last.at.hour.toString().padLeft(2, '0')}:${plan.reminders.last.at.minute.toString().padLeft(2, '0')} (${location.name}).';
@@ -228,11 +313,35 @@ class MedicationNotificationService
         exact: permission.exact,
       );
     } catch (_) {
+      // A session can change while the OS is accepting a request. Cancel only
+      // module-owned IDs and retain failed IDs for the next cleanup attempt.
+      try {
+        final pending = await backend.pending();
+        final ids = {
+          ..._knownIds,
+          for (final p in pending)
+            if (p.payload?.startsWith('sahacare.medication:') == true) p.id,
+        };
+        for (final id in ids) {
+          if (pending.any(
+            (p) =>
+                p.id == id &&
+                p.payload?.startsWith('sahacare.medication:') != true,
+          )) {
+            continue;
+          }
+          await backend.cancel(id);
+          _knownIds.remove(id);
+        }
+        await cleanupStore.write(_knownIds);
+      } catch (_) {
+        /* Durable cleanup IDs remain for a retry. */
+      }
       // Do not leak medical data or native exception payloads into the UI.
       value = MedicationNotificationState(
         MedicationNotificationStatus.error,
-        'Synchronisation incomplète : $count rappel(s) vérifié(s). Certains rappels n’ont pas pu être programmés ou annulés. Vos modifications sont enregistrées ; réessayez.',
-        count: count,
+        'Synchronisation incomplète. Certains rappels n’ont pas pu être programmés ou annulés. Réessayez avant de compter sur les rappels.',
+        count: 0,
       );
     } finally {
       if (_started && _foreground) {
@@ -248,6 +357,7 @@ class MedicationNotificationService
   void dispose() {
     _renewal?.cancel();
     if (_started) {
+      repository.access.removeListener(_sessionChanged);
       repository.onChanged = null;
       WidgetsBinding.instance.removeObserver(this);
     }

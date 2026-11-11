@@ -4,14 +4,17 @@ import '../entities/medication.dart';
 import '../entities/medication_occurrence.dart';
 
 class MedicationReminder {
-  const MedicationReminder({required this.key, required this.at});
+  const MedicationReminder({required this.key, required this.at, this.scope});
 
   final String key;
   final tz.TZDateTime at;
+  final String? scope;
 
   // No medical details in the lock-screen message or notification payload.
-  String get signature => '${at.millisecondsSinceEpoch}|${at.location.name}|v1';
-  String get payload => 'sahacare.medication:$key|$signature';
+  String get signature =>
+      '${at.millisecondsSinceEpoch}|${at.location.name}|${scope == null ? 'v1' : 'v2|$scope'}';
+  String get payload =>
+      'sahacare.medication:${scope == null ? '' : 'v2:$scope:'}$key|$signature';
 }
 
 class MedicationReminderPlan {

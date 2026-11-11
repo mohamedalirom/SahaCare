@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'app.dart';
 import 'core/config/supabase_config.dart';
 
 import 'core/database/platform_db/db_init.dart';
 import 'features/auth/services/auth_service.dart';
+import 'features/medications/data/services/medication_access.dart';
+import 'features/medications/data/services/medication_notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +20,8 @@ Future<void> main() async {
   await SupabaseConfig.initialize();
   AuthService.instance.initAuthListener();
   await AuthService.instance.initBiometricState();
+  MedicationAccess.instance.start();
+  MedicationNotificationService.instance.start();
 
   // Chargement des variables d'environnement (.env pour clé Gemini)
   try {
@@ -26,9 +31,5 @@ Future<void> main() async {
   }
 
   // Point d'entrée avec ProviderScope pour la gestion d'état
-  runApp(
-    const ProviderScope(
-      child: SahaCareApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: SahaCareApp()));
 }

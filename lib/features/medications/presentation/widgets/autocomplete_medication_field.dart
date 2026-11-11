@@ -14,6 +14,7 @@ class AutocompleteMedicationField extends StatefulWidget {
     this.onPresentationSelected,
     this.catalogRepository,
     this.validator,
+    this.localOnly = false,
     super.key,
   });
 
@@ -23,6 +24,7 @@ class AutocompleteMedicationField extends StatefulWidget {
   final ValueChanged<String?>? onPresentationSelected;
   final MedicationCatalogRepository? catalogRepository;
   final FormFieldValidator<String>? validator;
+  final bool localOnly;
 
   @override
   State<AutocompleteMedicationField> createState() =>
@@ -117,7 +119,7 @@ class _AutocompleteMedicationFieldState
         _hasSearchedLocally = true;
         _hasLocalError = false;
       });
-      if (query.trim().length < 2) return;
+      if (widget.localOnly || query.trim().length < 2) return;
       _debounce = Timer(_debounceDuration, () {
         _searchOnline(query, requestId);
       });
@@ -127,7 +129,7 @@ class _AutocompleteMedicationFieldState
         _hasSearchedLocally = true;
         _hasLocalError = true;
       });
-      if (query.trim().length >= 2) {
+      if (!widget.localOnly && query.trim().length >= 2) {
         _debounce = Timer(_debounceDuration, () {
           _searchOnline(query, requestId);
         });
@@ -136,6 +138,7 @@ class _AutocompleteMedicationFieldState
   }
 
   Future<void> _searchOnline(String query, int requestId) async {
+    if (widget.localOnly) return;
     if (!mounted || requestId != _requestId) return;
     setState(() {
       _isSearchingOnline = true;

@@ -1,3 +1,5 @@
+import 'helpers/medication_test_access.dart';
+
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -18,6 +20,8 @@ void main() {
     tester,
   ) async {
     final repository = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
     );
@@ -43,6 +47,8 @@ void main() {
     tester,
   ) async {
     final repository = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
     );
@@ -86,6 +92,8 @@ void main() {
     if (directory == null) fail('Could not create temporary SQLite directory.');
     final databasePath = path.join(directory.path, 'medications.db');
     final repository = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: databasePath,
     );
@@ -190,6 +198,8 @@ void main() {
 
     await tester.runAsync(repository.close);
     final reopenedRepository = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: databasePath,
     );

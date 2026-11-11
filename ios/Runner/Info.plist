@@ -28,6 +28,10 @@
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>SahaCare utilise Face ID pour protéger l'accès à votre dossier médical.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Photographier une ordonnance pour l'analyser localement après votre action. Aucun envoi automatique.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choisir une image d'ordonnance à analyser localement, sans publication ni envoi automatique.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>SahaCare utilise votre position pour localiser les médecins, cliniques et pharmacies à proximité.</string>
 	<key>CFBundleURLTypes</key>

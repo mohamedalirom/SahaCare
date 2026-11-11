@@ -129,7 +129,7 @@ class NativeMedicationNotificationBackend
   }) => _plugin.zonedSchedule(
     id: id,
     title: 'Rappel SahaCare',
-    body: 'Une prise de médicament est prévue. Consultez vos traitements.',
+    body: 'Ouvrez SahaCare pour consulter votre espace personnel.',
     scheduledDate: reminder.at,
     notificationDetails: const NotificationDetails(
       android: AndroidNotificationDetails(

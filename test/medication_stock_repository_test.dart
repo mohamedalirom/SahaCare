@@ -1,3 +1,5 @@
+import 'helpers/medication_test_access.dart';
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -45,6 +47,8 @@ void main() {
       (await repo.getById(id))!.stock!;
   setUp(() {
     repo = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
     );
@@ -300,6 +304,8 @@ void main() {
       final file = '${directory.path}/stock.db';
       await repo.close();
       repo = MedicationRepository(
+        access: testMedicationAccess(),
+        allowIsolatedMigration: true,
         databaseFactory: databaseFactoryFfi,
         databasePath: file,
       );
@@ -321,13 +327,15 @@ void main() {
       expect((await repo.stockMovements(id)).length, 1);
     },
   );
-  test('migration 5 to 6 preserves all medical and notification rows with no retroactive debit', () async {
+  test('stock upgrade to version 7 preserves owned test rows with no retroactive debit', () async {
     final directory = await Directory.systemTemp.createTemp(
       'sahacare_stock_migration_',
     );
     final file = '${directory.path}/stock.db';
     await repo.close();
     repo = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: file,
     );
@@ -337,7 +345,7 @@ void main() {
     await repo.notificationId('preserved-notification');
     await repo.close();
     final db = await databaseFactoryFfi.openDatabase(file);
-    // Disposable fixture only. Reconstruct exactly the old v5 schema.
+    // Disposable stock-regression fixture: old v5 stock structure, retaining the fictitious owner metadata. True unowned v6 migration is tested separately.
     await db.execute('DROP TABLE medication_stock_movements');
     await db.execute('DROP TABLE medication_stock');
     await db.setVersion(5);
@@ -351,12 +359,14 @@ void main() {
     final before = {for (final table in tables) table: await db.query(table)};
     await db.close();
     repo = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: file,
     );
     expect((await repo.getById(id))!.stock, isNull);
     final afterDb = await databaseFactoryFfi.openDatabase(file);
-    expect(await afterDb.getVersion(), 6);
+    expect(await afterDb.getVersion(), 7);
     for (final table in tables) {
       expect(await afterDb.query(table), before[table], reason: table);
     }
@@ -367,6 +377,8 @@ void main() {
     expect((await current(id)).remaining, q('10'));
     await repo.close();
     repo = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: file,
     );

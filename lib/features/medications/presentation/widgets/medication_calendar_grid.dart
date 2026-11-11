@@ -33,31 +33,40 @@ class MedicationWeekSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final today = DateUtils.dateOnly(DateTime.now());
-    return Row(
-      children: [
-        for (var index = 0; index < 7; index++)
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(right: index == 6 ? 0 : 5),
-              child: _WeekDayButton(
-                date: weekStart.add(Duration(days: index)),
-                selected: DateUtils.isSameDay(
-                  selectedDate,
-                  weekStart.add(Duration(days: index)),
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: constraints.maxWidth.clamp(350.0, double.infinity),
+          child: Row(
+            children: [
+              for (var index = 0; index < 7; index++)
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: index == 6 ? 0 : 5),
+                    child: _WeekDayButton(
+                      date: weekStart.add(Duration(days: index)),
+                      selected: DateUtils.isSameDay(
+                        selectedDate,
+                        weekStart.add(Duration(days: index)),
+                      ),
+                      isToday: DateUtils.isSameDay(
+                        today,
+                        weekStart.add(Duration(days: index)),
+                      ),
+                      count: _occurrencesForDate(
+                        occurrences,
+                        weekStart.add(Duration(days: index)),
+                      ).length,
+                      onTap: () =>
+                          onSelected(weekStart.add(Duration(days: index))),
+                    ),
+                  ),
                 ),
-                isToday: DateUtils.isSameDay(
-                  today,
-                  weekStart.add(Duration(days: index)),
-                ),
-                count: _occurrencesForDate(
-                  occurrences,
-                  weekStart.add(Duration(days: index)),
-                ).length,
-                onTap: () => onSelected(weekStart.add(Duration(days: index))),
-              ),
-            ),
+            ],
           ),
-      ],
+        ),
+      ),
     );
   }
 }
@@ -85,10 +94,10 @@ class MedicationMonthCalendar extends StatelessWidget {
     final today = DateUtils.dateOnly(DateTime.now());
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 16, 12, 14),
+      padding: const EdgeInsets.fromLTRB(8, 20, 8, 18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(color: const Color(0xFFEAF0F4)),
         boxShadow: [
           BoxShadow(
@@ -127,7 +136,7 @@ class MedicationMonthCalendar extends StatelessWidget {
               crossAxisCount: 7,
               mainAxisSpacing: 5,
               crossAxisSpacing: 5,
-              childAspectRatio: 0.78,
+              mainAxisExtent: 76,
             ),
             itemBuilder: (context, index) {
               final day = index - leadingDays + 1;
@@ -153,6 +162,7 @@ class MedicationMonthCalendar extends StatelessWidget {
             children: [
               _LegendItem(color: Color(0xFF16A34A), label: 'Pris'),
               _LegendItem(color: Color(0xFFF59E0B), label: 'À confirmer'),
+              _LegendItem(color: Color(0xFFF59E0B), label: 'Reporté'),
               _LegendItem(color: Color(0xFFDC2626), label: 'Ignoré'),
               _LegendItem(color: Color(0xFFCBD5E1), label: 'Aucune prise'),
             ],
@@ -218,8 +228,6 @@ class _WeekDayButton extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               '$count prise${count == 1 ? '' : 's'}',
-              maxLines: 1,
-              overflow: TextOverflow.clip,
               style: TextStyle(
                 fontSize: 8,
                 color: selected ? Colors.white : _teal,
@@ -256,63 +264,81 @@ class _MonthDayButton extends StatelessWidget {
               .toSet()
               .toList(growable: false);
 
-    return Material(
-      color: selected ? _teal : Colors.white,
-      borderRadius: BorderRadius.circular(13),
-      child: InkWell(
+    return AnimatedContainer(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 160),
+      decoration: BoxDecoration(
+        color: selected ? _teal : Colors.white,
         borderRadius: BorderRadius.circular(13),
-        onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(
-              color: selected || isToday ? _teal : const Color(0xFFEAF0F4),
-              width: selected || isToday ? 1.5 : 1,
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '${date.day}',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isToday || selected
-                      ? FontWeight.bold
-                      : FontWeight.w500,
-                  color: selected ? Colors.white : _ink,
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: _teal.withValues(alpha: .18),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
                 ),
+              ]
+            : [],
+      ),
+      child: Material(
+        color: selected ? _teal : Colors.white,
+        borderRadius: BorderRadius.circular(13),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(13),
+          onTap: onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(13),
+              border: Border.all(
+                color: selected || isToday ? _teal : const Color(0xFFEAF0F4),
+                width: selected || isToday ? 1.5 : 1,
               ),
-              if (occurrences.isNotEmpty) ...[
-                const SizedBox(height: 3),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
                 Text(
-                  '${occurrences.length}',
+                  '${date.day}',
                   style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : _teal,
+                    fontSize: 16,
+                    fontWeight: isToday || selected
+                        ? FontWeight.bold
+                        : FontWeight.w500,
+                    color: selected ? Colors.white : _ink,
                   ),
                 ),
-              ],
-              const SizedBox(height: 3),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (final color in dotColors.take(3))
-                    Container(
-                      width: 5,
-                      height: 5,
-                      margin: const EdgeInsets.symmetric(horizontal: 1),
-                      decoration: BoxDecoration(
-                        color: selected && occurrences.isEmpty
-                            ? Colors.white70
-                            : color,
-                        shape: BoxShape.circle,
-                      ),
+                if (occurrences.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    '${occurrences.length}',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Colors.white : _teal,
                     ),
+                  ),
                 ],
-              ),
-            ],
+                const SizedBox(height: 3),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final color in dotColors.take(3))
+                      Container(
+                        width: 5,
+                        height: 5,
+                        margin: const EdgeInsets.symmetric(horizontal: 1),
+                        decoration: BoxDecoration(
+                          color: selected && occurrences.isEmpty
+                              ? Colors.white70
+                              : color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -301,6 +301,7 @@ class _MedicationStockSectionState extends State<MedicationStockSection> {
       if (_busy) const LinearProgressIndicator(color: Color(0xFF0D9488)),
       MedicationStockCard(
         stock: _medication.stock,
+        commercialPresentation: _medication.commercialPresentation,
         onConfigure: _busy ? null : () => widget.onConfigure(),
         onReplenish: _busy ? null : () => _editQuantity(correction: false),
         onCorrect: _busy ? null : () => _editQuantity(correction: true),

@@ -1,3 +1,5 @@
+import 'helpers/medication_test_access.dart';
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -92,11 +94,14 @@ void main() {
   );
   setUp(() {
     repo = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
     );
     backend = _Backend();
     service = MedicationNotificationService(
+      cleanupStore: TestMedicationCleanupStore(),
       repository: repo,
       backend: backend,
       now: () => now,
@@ -329,6 +334,8 @@ void main() {
       );
       final path = '${dir.path}/medications.db';
       final legacy = MedicationRepository(
+        access: testMedicationAccess(),
+        allowIsolatedMigration: true,
         databaseFactory: databaseFactoryFfi,
         databasePath: path,
       );
@@ -350,6 +357,8 @@ void main() {
       final historyBefore = await db.query('medication_occurrences');
       await db.close();
       final upgraded = MedicationRepository(
+        access: testMedicationAccess(),
+        allowIsolatedMigration: true,
         databaseFactory: databaseFactoryFfi,
         databasePath: path,
       );
@@ -358,7 +367,7 @@ void main() {
       expect(await upgraded.notificationRegistry(), isEmpty);
       await upgraded.close();
       final check = await databaseFactoryFfi.openDatabase(path);
-      expect(await check.getVersion(), 6);
+      expect(await check.getVersion(), 7);
       expect(await check.query('medications'), rowsBefore);
       expect(await check.query('medication_occurrences'), historyBefore);
       await check.close();

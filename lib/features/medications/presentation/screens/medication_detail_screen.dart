@@ -7,6 +7,7 @@ import '../../data/medication_repository.dart';
 import '../../domain/entities/medication.dart';
 import '../../domain/entities/medication_occurrence.dart';
 import '../widgets/medication_stock_section.dart';
+import '../widgets/medication_visuals.dart';
 
 class MedicationDetailScreen extends StatefulWidget {
   const MedicationDetailScreen({super.key, this.medicationId, this.repository});
@@ -101,7 +102,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   @override
   Widget build(BuildContext context) => MedicationScaffold(
     manageNotifications: widget.repository == null,
-    backgroundColor: const Color(0xFFF8FAFC),
+    backgroundColor: MedicationColors.canvas,
     appBar: AppBar(
       leading: IconButton(
         onPressed: () => context.pop(_hasChanges),
@@ -136,17 +137,13 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
           children: [
             Center(
               child: Container(
-                width: 80,
-                height: 80,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFCCFBF1),
-                  shape: BoxShape.circle,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: MedicationColors.line),
                 ),
-                child: const Icon(
-                  Icons.medication_outlined,
-                  size: 42,
-                  color: Color(0xFF0D9488),
-                ),
+                padding: const EdgeInsets.all(8),
+                child: const MedicationIllustration(size: 86),
               ),
             ),
             const SizedBox(height: 15),
@@ -155,9 +152,10 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                 medication.name,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+                  fontSize: 27,
+                  letterSpacing: -.6,
+                  fontWeight: FontWeight.w800,
+                  color: MedicationColors.ink,
                 ),
               ),
             ),
@@ -201,7 +199,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
-            const SizedBox(height: 25),
+            const SizedBox(height: 20),
             MedicationStockSection(
               medication: medication,
               repository: _repository,
@@ -290,8 +288,8 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: const Color(0xFFE2E8F0)),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: MedicationColors.line),
     ),
     child: Row(
       children: [
@@ -299,7 +297,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: const Color(0xFFCCFBF1),
+            color: const Color(0xFFE5F5F0),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: const Color(0xFF0D9488)),

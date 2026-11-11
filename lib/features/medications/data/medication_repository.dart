@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -8,29 +10,115 @@ import '../../../core/config/supabase_config.dart';
 import '../domain/entities/medication.dart';
 import '../domain/entities/medication_occurrence.dart';
 import '../domain/entities/medication_stock.dart';
+import '../domain/services/medication_adherence.dart';
+import '../domain/entities/medication_report.dart';
+import 'services/medication_access.dart';
+import 'services/medication_ownership_schema.dart';
 
 class MedicationRepository {
   MedicationRepository({
     sqflite.DatabaseFactory? databaseFactory,
     String? databasePath,
     this.onChanged,
+    MedicationAccess? access,
+    this.allowIsolatedMigration = false,
   }) : _databaseFactoryOverride = databaseFactory,
-       _databasePathOverride = databasePath;
+       _databasePathOverride = databasePath,
+       access = access ?? MedicationAccess.instance {
+    if (allowIsolatedMigration &&
+        (databaseFactory == null || databasePath == null)) {
+      throw ArgumentError(
+        'Une migration de test exige une base et une factory explicitement isolées.',
+      );
+    }
+  }
 
   static final MedicationRepository instance = MedicationRepository();
 
   final sqflite.DatabaseFactory? _databaseFactoryOverride;
   final String? _databasePathOverride;
   sqflite.Database? _database;
+  Future<sqflite.Database>? _opening;
+  final MedicationAccess access;
+  final bool allowIsolatedMigration;
+  static final Object _leaseKey = Object();
+  MedicationLease get _lease => Zone.current[_leaseKey] as MedicationLease;
+  String get _owner {
+    _lease.check();
+    return _lease.owner;
+  }
+
+  Future<T> _scoped<T>(Future<T> Function() action) async {
+    // Capture before the first await. An old form/request must never wait for
+    // another account to log in and then adopt that account's identity.
+    final lease = access.capture();
+    return runZoned(() async {
+      lease.check();
+      try {
+        final result = await action();
+        lease.check();
+        return result;
+      } catch (_) {
+        // Stale SQL/plugin errors can carry old medical arguments.
+        lease.check();
+        rethrow;
+      }
+    }, zoneValues: {_leaseKey: lease});
+  }
+
+  Future<T> _transaction<T>(
+    sqflite.Database db,
+    Future<T> Function(sqflite.Transaction) action,
+  ) => db.transaction((tx) async {
+    _lease.check();
+    final result = await action(tx);
+    _lease.check();
+    return result;
+  });
+
+  Future<void> prepareStorage() => _scoped(() async {
+    await _getDatabase();
+  });
+
+  Future<void> _requireOwnedMedication(
+    sqflite.DatabaseExecutor db,
+    int id,
+  ) async {
+    final rows = await db.query(
+      'medications',
+      columns: ['id'],
+      where: 'id = ? AND owner_id = ?',
+      whereArgs: [id, _owner],
+      limit: 1,
+    );
+    _lease.check();
+    if (rows.isEmpty) throw StateError('Traitement introuvable.');
+  }
+
+  Future<void> _requireOwnedOccurrence(
+    sqflite.DatabaseExecutor db,
+    int id,
+  ) async {
+    final rows = await db.rawQuery(
+      '''SELECT o.id FROM medication_occurrences o
+      JOIN medications m ON m.id=o.medication_id
+      JOIN medication_schedules s ON s.id=o.schedule_id AND s.medication_id=m.id
+      WHERE o.id=? AND m.owner_id=? LIMIT 1''',
+      [id, _owner],
+    );
+    _lease.check();
+    if (rows.isEmpty) throw StateError('Cette prise est introuvable.');
+  }
 
   /// Called after a committed business mutation, never inside its transaction.
   Future<void> Function()? onChanged;
 
-  Future<List<Medication>> getAll() async {
+  Future<List<Medication>> getAll() => _scoped(() async {
     final database = await _getDatabase();
     final rows = await database.query(
       'medications',
-      where: 'deleted_at IS NULL',
+      where: 'owner_id = ? AND deleted_at IS NULL',
+      whereArgs: [_owner],
       orderBy: 'name COLLATE NOCASE',
     );
     final medications = <Medication>[];
@@ -38,66 +126,68 @@ class MedicationRepository {
       medications.add(await _loadMedication(database, row));
     }
     return medications;
-  }
+  });
 
-  Future<Medication?> getById(int id) async {
+  Future<Medication?> getById(int id) => _scoped(() async {
     final database = await _getDatabase();
     final rows = await database.query(
       'medications',
-      where: 'id = ? AND deleted_at IS NULL',
-      whereArgs: [id],
+      where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
+      whereArgs: [id, _owner],
       limit: 1,
     );
     return rows.isEmpty ? null : _loadMedication(database, rows.first);
-  }
+  });
 
-  Future<int> create(Medication medication) async {
+  Future<int> create(Medication medication) => _scoped(() async {
     final times = _validatedTimes(medication);
     final database = await _getDatabase();
-    final result = await database.transaction((transaction) async {
-      final id = await transaction.insert(
-        'medications',
-        _medicationValues(medication, times),
-      );
+    final result = await _transaction(database, (transaction) async {
+      final id = await transaction.insert('medications', {
+        ..._medicationValues(medication, times),
+        'owner_id': _owner,
+      });
       await _saveSchedule(transaction, id, medication.weekdaysMask, times);
       await _saveStockSettings(transaction, id, medication.stock);
       return id;
     });
+    _lease.check();
     await onChanged?.call();
     return result;
-  }
+  });
 
-  Future<int> update(Medication medication) async {
+  Future<int> update(Medication medication) => _scoped(() async {
     final id = medication.id;
     if (id == null) {
       throw ArgumentError.value(id, 'medication.id', 'Must not be null');
     }
     final times = _validatedTimes(medication);
     final database = await _getDatabase();
-    final result = await database.transaction((transaction) async {
+    final result = await _transaction(database, (transaction) async {
       final changed = await transaction.update(
         'medications',
         _medicationValues(medication, times),
-        where: 'id = ? AND deleted_at IS NULL',
-        whereArgs: [id],
+        where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
+        whereArgs: [id, _owner],
       );
       if (changed == 0) return 0;
       await _saveSchedule(transaction, id, medication.weekdaysMask, times);
       await _saveStockSettings(transaction, id, medication.stock);
       return changed;
     });
+    _lease.check();
     await onChanged?.call();
     return result;
-  }
+  });
 
-  Future<int> delete(int id) async {
+  Future<int> delete(int id) => _scoped(() async {
     final database = await _getDatabase();
-    final result = await database.transaction((transaction) async {
+    final result = await _transaction(database, (transaction) async {
       final deleted = await transaction.update(
         'medications',
         {'deleted_at': DateTime.now().toIso8601String()},
-        where: 'id = ? AND deleted_at IS NULL',
-        whereArgs: [id],
+        where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
+        whereArgs: [id, _owner],
       );
       if (deleted == 0) return 0;
       await transaction.delete(
@@ -107,14 +197,15 @@ class MedicationRepository {
       );
       return deleted;
     });
+    _lease.check();
     await onChanged?.call();
     return result;
-  }
+  });
 
   Future<int> ensureOccurrences({
     required DateTime from,
     required DateTime through,
-  }) async {
+  }) => _scoped(() async {
     final firstDay = _dateOnly(from);
     final lastDay = _dateOnly(through);
     if (lastDay.isBefore(firstDay)) {
@@ -122,18 +213,18 @@ class MedicationRepository {
     }
 
     final database = await _getDatabase();
-    return database.transaction((transaction) async {
+    return _transaction(database, (transaction) async {
       final schedules = await transaction.rawQuery(
         '''
         SELECT s.id AS schedule_id, s.medication_id, s.weekdays_mask,
           m.start_date, m.end_date
         FROM medication_schedules s
         JOIN medications m ON m.id = s.medication_id
-        WHERE m.deleted_at IS NULL
+        WHERE m.owner_id = ? AND m.deleted_at IS NULL
           AND m.start_date <= ?
           AND (m.end_date IS NULL OR m.end_date >= ?)
       ''',
-        [_dateToDatabase(lastDay), _dateToDatabase(firstDay)],
+        [_owner, _dateToDatabase(lastDay), _dateToDatabase(firstDay)],
       );
       var inserted = 0;
 
@@ -184,12 +275,12 @@ class MedicationRepository {
       }
       return inserted;
     });
-  }
+  });
 
   Future<List<MedicationOccurrence>> getOccurrences({
     required DateTime from,
     required DateTime through,
-  }) async {
+  }) => _scoped(() async {
     final database = await _getDatabase();
     final rows = await database.rawQuery(
       '''
@@ -199,7 +290,8 @@ class MedicationRepository {
         m.active_ingredient AS medication_active_ingredient
       FROM medication_occurrences o
       JOIN medications m ON m.id = o.medication_id
-      WHERE COALESCE(o.rescheduled_date, o.scheduled_date) BETWEEN ? AND ?
+      JOIN medication_schedules scope_s ON scope_s.id=o.schedule_id AND scope_s.medication_id=m.id
+      WHERE m.owner_id = ? AND COALESCE(o.rescheduled_date, o.scheduled_date) BETWEEN ? AND ?
         AND (
           m.deleted_at IS NULL
           OR COALESCE(o.rescheduled_date, o.scheduled_date) <= ?
@@ -208,17 +300,91 @@ class MedicationRepository {
         COALESCE(o.rescheduled_time, o.scheduled_time), m.name COLLATE NOCASE
     ''',
       [
+        _owner,
         _dateToDatabase(from),
         _dateToDatabase(through),
         _dateToDatabase(DateTime.now()),
       ],
     );
     return rows.map(MedicationOccurrence.fromMap).toList();
+  });
+
+  /// Read-only: never backfills missing days or alters archived treatments.
+  Future<List<AdherenceRecord>> getAdherenceRecords({
+    required DateTime from,
+    required DateTime through,
+  }) => _scoped(() async {
+    final database = await _getDatabase();
+    return _readAdherenceRecords(database, from: from, through: through);
+  });
+
+  Future<List<AdherenceRecord>> _readAdherenceRecords(
+    sqflite.DatabaseExecutor database, {
+    required DateTime from,
+    required DateTime through,
+  }) async {
+    final rows = await database.rawQuery(
+      '''
+      SELECT o.*, m.name AS medication_name, m.dosage AS medication_dosage,
+        m.start_date AS medication_start_date, m.end_date AS medication_end_date,
+        m.active_ingredient AS medication_active_ingredient, m.deleted_at AS archived_at
+      FROM medication_occurrences o JOIN medications m ON m.id = o.medication_id
+      JOIN medication_schedules scope_s ON scope_s.id=o.schedule_id AND scope_s.medication_id=m.id
+      WHERE m.owner_id = ? AND COALESCE(o.rescheduled_date, o.scheduled_date) BETWEEN ? AND ?
+      ORDER BY o.id
+    ''',
+      [_owner, _dateToDatabase(from), _dateToDatabase(through)],
+    );
+    return rows
+        .map(
+          (row) => AdherenceRecord(
+            MedicationOccurrence.fromMap(row),
+            archivedAt: row['archived_at'] == null
+                ? null
+                : DateTime.parse(row['archived_at'] as String),
+          ),
+        )
+        .toList();
   }
+
+  /// One consistent read transaction, without generating missing occurrences.
+  Future<MedicationReportSnapshot> getReportSnapshot({
+    required DateTime from,
+    required DateTime through,
+  }) => _scoped(() async {
+    final database = await _getDatabase();
+    return _transaction(database, (tx) async {
+      final rows = await tx.query(
+        'medications',
+        where: 'owner_id = ?',
+        whereArgs: [_owner],
+        orderBy: 'name COLLATE NOCASE',
+      );
+      final treatments = <ReportTreatment>[];
+      for (final row in rows) {
+        treatments.add(
+          ReportTreatment(
+            await _loadMedication(tx, row),
+            archivedAt: row['deleted_at'] == null
+                ? null
+                : DateTime.parse(row['deleted_at'] as String),
+          ),
+        );
+      }
+      return MedicationReportSnapshot(
+        treatments: treatments,
+        occurrences: await _readAdherenceRecords(
+          tx,
+          from: from,
+          through: through,
+        ),
+      );
+    });
+  });
 
   Future<List<MedicationOccurrence>> getOccurrencesForMedication(
     int medicationId,
-  ) async {
+  ) => _scoped(() async {
     final database = await _getDatabase();
     final rows = await database.rawQuery(
       '''
@@ -228,18 +394,20 @@ class MedicationRepository {
         m.active_ingredient AS medication_active_ingredient
       FROM medication_occurrences o
       JOIN medications m ON m.id = o.medication_id
-      WHERE o.medication_id = ?
+      JOIN medication_schedules scope_s ON scope_s.id=o.schedule_id AND scope_s.medication_id=m.id
+      WHERE o.medication_id = ? AND m.owner_id = ?
       ORDER BY COALESCE(o.rescheduled_date, o.scheduled_date) DESC,
         COALESCE(o.rescheduled_time, o.scheduled_time) DESC
       ''',
-      [medicationId],
+      [medicationId, _owner],
     );
     return rows.map(MedicationOccurrence.fromMap).toList();
-  }
+  });
 
-  Future<void> markOccurrenceTaken(int occurrenceId) async {
+  Future<void> markOccurrenceTaken(int occurrenceId) => _scoped(() async {
     final db = await _getDatabase();
-    await db.transaction((tx) async {
+    await _transaction(db, (tx) async {
+      await _requireOwnedOccurrence(tx, occurrenceId);
       final rows = await tx.query(
         'medication_occurrences',
         where: 'id = ?',
@@ -299,62 +467,69 @@ class MedicationRepository {
         whereArgs: [occurrenceId],
       );
     });
+    _lease.check();
     await onChanged?.call();
-  }
+  });
 
-  Future<List<StockMovement>> stockMovements(int medicationId) async =>
-      (await (await _getDatabase()).rawQuery(
-        '''
+  Future<List<StockMovement>> stockMovements(int medicationId) =>
+      _scoped(() async {
+        final database = await _getDatabase();
+        await _requireOwnedMedication(database, medicationId);
+        return (await (await _getDatabase()).rawQuery(
+          '''
         SELECT m.*, CASE WHEN m.kind = 'anomaly' AND NOT EXISTS (
           SELECT 1 FROM medication_stock_movements r WHERE r.resolves_id = m.id
         ) THEN 1 ELSE 0 END AS unresolved
         FROM medication_stock_movements m WHERE medication_id = ?
         ORDER BY id DESC
       ''',
-        [medicationId],
-      )).map(StockMovement.fromMap).toList();
+          [medicationId],
+        )).map(StockMovement.fromMap).toList();
+      });
 
-  Future<void> replenishStock(int medicationId, StockQuantity quantity) async {
-    final db = await _getDatabase();
-    await db.transaction((tx) async {
-      final stock = await _requireStock(tx, medicationId);
-      stock.unit.validate(quantity);
-      if (quantity.milliUnits <= 0) {
-        throw ArgumentError('Ajoutez une quantité positive.');
-      }
-      final remaining = stock.remaining + quantity;
-      await tx.update(
-        'medication_stock',
-        {
-          'remaining_milli': remaining.milliUnits,
-          'reference_milli':
-              remaining.milliUnits > stock.referenceQuantity.milliUnits
-              ? remaining.milliUnits
-              : stock.referenceQuantity.milliUnits,
-        },
-        where: 'medication_id = ?',
-        whereArgs: [medicationId],
-      );
-      await _stockMovement(
-        tx,
-        medicationId,
-        'replenishment',
-        quantity.milliUnits,
-        quantityAfter: remaining.milliUnits,
-        unit: stock.unit,
-      );
-    });
-    await onChanged?.call();
-  }
+  Future<void> replenishStock(int medicationId, StockQuantity quantity) =>
+      _scoped(() async {
+        final db = await _getDatabase();
+        await _transaction(db, (tx) async {
+          final stock = await _requireStock(tx, medicationId);
+          stock.unit.validate(quantity);
+          if (quantity.milliUnits <= 0) {
+            throw ArgumentError('Ajoutez une quantité positive.');
+          }
+          final remaining = stock.remaining + quantity;
+          await tx.update(
+            'medication_stock',
+            {
+              'remaining_milli': remaining.milliUnits,
+              'reference_milli':
+                  remaining.milliUnits > stock.referenceQuantity.milliUnits
+                  ? remaining.milliUnits
+                  : stock.referenceQuantity.milliUnits,
+            },
+            where: 'medication_id = ?',
+            whereArgs: [medicationId],
+          );
+          await _stockMovement(
+            tx,
+            medicationId,
+            'replenishment',
+            quantity.milliUnits,
+            quantityAfter: remaining.milliUnits,
+            unit: stock.unit,
+          );
+        });
+        _lease.check();
+        await onChanged?.call();
+      });
 
   Future<void> correctStockQuantity(
     int medicationId,
     StockQuantity quantity, {
     required String reason,
     List<int> reconciledAnomalyIds = const [],
-  }) async {
+  }) => _scoped(() async {
     final db = await _getDatabase();
-    await db.transaction((tx) async {
+    await _transaction(db, (tx) async {
       final stock = await _requireStock(tx, medicationId);
       stock.unit.validate(quantity);
       if (quantity.milliUnits < 0 || reason.trim().isEmpty) {
@@ -399,41 +574,44 @@ class MedicationRepository {
         );
       }
     });
+    _lease.check();
     await onChanged?.call();
-  }
+  });
 
-  Future<void> resolveStockAnomaly(int medicationId, int anomalyId) async {
-    final db = await _getDatabase();
-    await db.transaction((tx) async {
-      final stock = await _requireStock(tx, medicationId);
-      final anomaly = await _requireAnomaly(tx, medicationId, anomalyId);
-      if (anomaly == null) return; // Already resolved: idempotent.
-      final required = anomaly['required_milli'] as int;
-      if (stock.remaining.milliUnits < required) {
-        throw StateError(
-          'Stock insuffisant pour le débit complet. Corrigez la quantité ou réapprovisionnez.',
-        );
-      }
-      final remaining = stock.remaining.milliUnits - required;
-      await tx.update(
-        'medication_stock',
-        {'remaining_milli': remaining},
-        where: 'medication_id = ?',
-        whereArgs: [medicationId],
-      );
-      await _stockMovement(
-        tx,
-        medicationId,
-        'resolution',
-        -required,
-        quantityAfter: remaining,
-        unit: stock.unit,
-        required: required,
-        resolvesId: anomalyId,
-      );
-    });
-    await onChanged?.call();
-  }
+  Future<void> resolveStockAnomaly(int medicationId, int anomalyId) =>
+      _scoped(() async {
+        final db = await _getDatabase();
+        await _transaction(db, (tx) async {
+          final stock = await _requireStock(tx, medicationId);
+          final anomaly = await _requireAnomaly(tx, medicationId, anomalyId);
+          if (anomaly == null) return; // Already resolved: idempotent.
+          final required = anomaly['required_milli'] as int;
+          if (stock.remaining.milliUnits < required) {
+            throw StateError(
+              'Stock insuffisant pour le débit complet. Corrigez la quantité ou réapprovisionnez.',
+            );
+          }
+          final remaining = stock.remaining.milliUnits - required;
+          await tx.update(
+            'medication_stock',
+            {'remaining_milli': remaining},
+            where: 'medication_id = ?',
+            whereArgs: [medicationId],
+          );
+          await _stockMovement(
+            tx,
+            medicationId,
+            'resolution',
+            -required,
+            quantityAfter: remaining,
+            unit: stock.unit,
+            required: required,
+            resolvesId: anomalyId,
+          );
+        });
+        _lease.check();
+        await onChanged?.call();
+      });
 
   Future<Map<String, Object?>?> _requireAnomaly(
     sqflite.DatabaseExecutor db,
@@ -462,8 +640,8 @@ class MedicationRepository {
     final medications = await db.query(
       'medications',
       columns: ['id'],
-      where: 'id = ? AND deleted_at IS NULL',
-      whereArgs: [medicationId],
+      where: 'id = ? AND owner_id = ? AND deleted_at IS NULL',
+      whereArgs: [medicationId, _owner],
     );
     if (medications.isEmpty) {
       throw StateError('Traitement introuvable ou archivé.');
@@ -577,96 +755,120 @@ class MedicationRepository {
     required int occurrenceId,
     required DateTime date,
     required String time,
-  }) async {
+  }) => _scoped(() async {
     final normalizedTime = _normalizeTime(time);
     if (normalizedTime == null) {
       throw ArgumentError.value(time, 'time', 'Invalid medication time');
     }
     final database = await _getDatabase();
-    final rows = await database.rawQuery(
-      '''
+    await _transaction(database, (database) async {
+      final rows = await database.rawQuery(
+        '''
       SELECT m.start_date, m.end_date
       FROM medication_occurrences o
       JOIN medications m ON m.id = o.medication_id
-      WHERE o.id = ?
+      JOIN medication_schedules scope_s ON scope_s.id=o.schedule_id AND scope_s.medication_id=m.id
+      WHERE o.id = ? AND m.owner_id = ?
       ''',
-      [occurrenceId],
-    );
-    if (rows.isEmpty) throw StateError('Cette prise est introuvable.');
-
-    final selectedDate = _dateOnly(date);
-    final startDate = DateTime.parse(rows.first['start_date'] as String);
-    final endDate = rows.first['end_date'] == null
-        ? null
-        : DateTime.parse(rows.first['end_date'] as String);
-    if (selectedDate.isBefore(_dateOnly(startDate)) ||
-        (endDate != null && selectedDate.isAfter(_dateOnly(endDate)))) {
-      throw ArgumentError.value(
-        date,
-        'date',
-        'The postponed occurrence must remain within the treatment period.',
+        [occurrenceId, _owner],
       );
-    }
+      if (rows.isEmpty) throw StateError('Cette prise est introuvable.');
 
-    final changed = await database.update(
-      'medication_occurrences',
-      {
-        'status': MedicationOccurrenceStatus.postponed.name,
-        'rescheduled_date': _dateToDatabase(selectedDate),
-        'rescheduled_time': normalizedTime,
-        'confirmed_at': null,
-      },
-      where: 'id = ?',
-      whereArgs: [occurrenceId],
-    );
-    if (changed == 0) throw StateError('Cette prise est introuvable.');
+      final selectedDate = _dateOnly(date);
+      final startDate = DateTime.parse(rows.first['start_date'] as String);
+      final endDate = rows.first['end_date'] == null
+          ? null
+          : DateTime.parse(rows.first['end_date'] as String);
+      if (selectedDate.isBefore(_dateOnly(startDate)) ||
+          (endDate != null && selectedDate.isAfter(_dateOnly(endDate)))) {
+        throw ArgumentError.value(
+          date,
+          'date',
+          'The postponed occurrence must remain within the treatment period.',
+        );
+      }
+
+      await _requireOwnedOccurrence(database, occurrenceId);
+      _lease.check();
+      final changed = await database.update(
+        'medication_occurrences',
+        {
+          'status': MedicationOccurrenceStatus.postponed.name,
+          'rescheduled_date': _dateToDatabase(selectedDate),
+          'rescheduled_time': normalizedTime,
+          'confirmed_at': null,
+        },
+        where: 'id = ?',
+        whereArgs: [occurrenceId],
+      );
+      if (changed == 0) throw StateError('Cette prise est introuvable.');
+    });
+    _lease.check();
     await onChanged?.call();
-  }
+  });
 
-  Future<void> ignoreOccurrence(int occurrenceId) async {
-    final changed = await (await _getDatabase()).update(
-      'medication_occurrences',
-      {'status': MedicationOccurrenceStatus.ignored.name, 'confirmed_at': null},
-      where: 'id = ?',
-      whereArgs: [occurrenceId],
-    );
-    if (changed == 0) {
-      throw StateError('Cette prise est introuvable.');
-    }
+  Future<void> ignoreOccurrence(int occurrenceId) => _scoped(() async {
+    final database = await _getDatabase();
+    await _transaction(database, (database) async {
+      await _requireOwnedOccurrence(database, occurrenceId);
+      _lease.check();
+      final changed = await database.update(
+        'medication_occurrences',
+        {
+          'status': MedicationOccurrenceStatus.ignored.name,
+          'confirmed_at': null,
+        },
+        where: 'id = ?',
+        whereArgs: [occurrenceId],
+      );
+      if (changed == 0) {
+        throw StateError('Cette prise est introuvable.');
+      }
+    });
+    _lease.check();
     await onChanged?.call();
-  }
+  });
 
-  Future<List<Map<String, Object?>>> notificationRegistry() async =>
-      (await _getDatabase()).query('medication_notification_registry');
+  Future<List<Map<String, Object?>>> notificationRegistry() =>
+      _scoped(() async {
+        return (await _getDatabase()).query(
+          'medication_notification_registry',
+          where: 'owner_id = ?',
+          whereArgs: [_owner],
+        );
+      });
 
   /// Durable IDs are reserved before calling the OS. A crash can be reconciled
   /// using these rows and the OS pending list on the next synchronization.
-  Future<int> notificationId(String key) async {
+  Future<int> notificationId(String key) => _scoped(() async {
     final db = await _getDatabase();
-    return db.transaction((transaction) async {
+    return _transaction(db, (transaction) async {
       await transaction.insert('medication_notification_registry', {
-        'reminder_key': key,
+        'reminder_key': '$_owner|$key',
+        'owner_id': _owner,
       }, conflictAlgorithm: sqflite.ConflictAlgorithm.ignore);
       final rows = await transaction.query(
         'medication_notification_registry',
-        where: 'reminder_key = ?',
-        whereArgs: [key],
+        where: 'reminder_key = ? AND owner_id = ?',
+        whereArgs: ['$_owner|$key', _owner],
         limit: 1,
       );
       final id = 1000000000 + (rows.single['id'] as int);
       if (id > 2147483647) throw StateError('Identifiants de rappel épuisés.');
       return id;
     });
-  }
+  });
 
-  Future<void> recordNotification(int systemId, String? signature) async {
-    await (await _getDatabase()).update(
-      'medication_notification_registry',
-      {'signature': signature},
-      where: 'id = ?',
-      whereArgs: [systemId - 1000000000],
-    );
-  }
+  Future<void> recordNotification(int systemId, String? signature) =>
+      _scoped(() async {
+        final changed = await (await _getDatabase()).update(
+          'medication_notification_registry',
+          {'signature': signature},
+          where: 'id = ? AND owner_id = ?',
+          whereArgs: [systemId - 1000000000, _owner],
+        );
+        if (changed == 0) throw StateError('Rappel introuvable.');
+      });
 
   Future<void> close() async {
     final database = _database;
@@ -677,16 +879,49 @@ class MedicationRepository {
   }
 
   Future<sqflite.Database> _getDatabase() async {
+    _lease.check();
     if (_database != null) {
       return _database!;
     }
+    final pending = _opening ??= _openDatabase();
+    try {
+      final db = await pending;
+      _lease.check();
+      return db;
+    } finally {
+      if (identical(_opening, pending)) _opening = null;
+    }
+  }
+
+  Future<sqflite.Database> _openDatabase() async {
+    _lease.check();
 
     final factory = _databaseFactoryOverride ?? _platformDatabaseFactory();
     final databasePath = _databasePathOverride ?? await _getDatabasePath();
+    _lease.check();
+    if (await factory.databaseExists(databasePath)) {
+      final probe = await factory.openDatabase(
+        databasePath,
+        options: sqflite.OpenDatabaseOptions(
+          readOnly: true,
+          // Web has one SQLite instance/VFS and rejects multiple connections.
+          // Serialize this read-only probe through the repository's _opening
+          // future, close it, then open normally only after version approval.
+          singleInstance: kIsWeb,
+        ),
+      );
+      final version = await probe.getVersion();
+      await probe.close();
+      _lease.check();
+      if (version != 7 && !allowIsolatedMigration) {
+        throw MedicationMigrationRequired(version);
+      }
+      if (version > 7) throw MedicationMigrationRequired(version);
+    }
     _database = await factory.openDatabase(
       databasePath,
       options: sqflite.OpenDatabaseOptions(
-        version: 6,
+        version: 7,
         onConfigure: (database) async {
           await database.execute('PRAGMA foreign_keys = ON');
         },
@@ -708,6 +943,7 @@ class MedicationRepository {
           await _createScheduleTables(database);
           await _createNotificationRegistry(database);
           await _createStockTables(database);
+          await addMedicationOwnershipSchema(database);
         },
         onUpgrade: (database, oldVersion, newVersion) async {
           if (oldVersion < 2) {
@@ -769,9 +1005,13 @@ class MedicationRepository {
               FROM medication_occurrences WHERE status = 'taken'
             ''');
           }
+          if (oldVersion < 7) {
+            await addMedicationOwnershipSchema(database);
+          }
         },
       ),
     );
+    _lease.check();
     return _database!;
   }
 
@@ -824,6 +1064,7 @@ class MedicationRepository {
     Map<String, Object?> row,
   ) async {
     final medicationId = row['id'] as int;
+    await _requireOwnedMedication(database, medicationId);
     final rules = await database.query(
       'medication_schedules',
       columns: ['id', 'weekdays_mask'],

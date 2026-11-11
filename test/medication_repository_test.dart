@@ -1,3 +1,5 @@
+import 'helpers/medication_test_access.dart';
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +17,8 @@ void main() {
     'supports medication create, read, update and delete in SQLite',
     () async {
       final repository = MedicationRepository(
+        access: testMedicationAccess(),
+        allowIsolatedMigration: true,
         databaseFactory: databaseFactoryFfi,
         databasePath: inMemoryDatabasePath,
       );
@@ -67,6 +71,8 @@ void main() {
 
   test('archiving removes future doses but retains recorded history', () async {
     final repository = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
     );
@@ -152,6 +158,8 @@ void main() {
     await legacyDatabase.close();
 
     final repository = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: databasePath,
     );
@@ -162,19 +170,32 @@ void main() {
     });
 
     final migrated = await repository.getById(1);
-    expect(migrated?.name, 'Traitement existant');
-    expect(migrated?.dosage, '1 comprimé');
-    expect(migrated?.reminderEnabled, isTrue);
-    expect(migrated?.activeIngredient, isNull);
-    expect(migrated?.commercialPresentation, isNull);
-    expect(migrated?.scheduleTimes, ['08:00']);
-    expect(migrated?.weekdaysMask, 127);
+    expect(
+      migrated,
+      isNull,
+    ); // Anonymous history must not become the logged-in user's data.
+    final inspect = await databaseFactoryFfi.openDatabase(databasePath);
+    final row = (await inspect.query('medications')).single;
+    expect(row['name'], 'Traitement existant');
+    expect(row['dosage'], '1 comprimé');
+    expect(row['reminder_enabled'], 1);
+    expect(row['owner_id'], isNull);
+    expect(
+      (await inspect.query('medication_schedule_times')).single['time'],
+      '08:00',
+    );
+    expect(
+      (await inspect.query('medication_schedules')).single['weekdays_mask'],
+      127,
+    );
   });
 
   test(
     'generates only selected days and prevents duplicate occurrences',
     () async {
       final repository = MedicationRepository(
+        access: testMedicationAccess(),
+        allowIsolatedMigration: true,
         databaseFactory: databaseFactoryFfi,
         databasePath: inMemoryDatabasePath,
       );
@@ -243,6 +264,8 @@ void main() {
 
   test('records postponed dates and explicit confirmation', () async {
     final repository = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
     );
@@ -294,6 +317,8 @@ void main() {
 
   test('rejects duplicate times and empty weekday selections', () async {
     final repository = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
     );
@@ -321,6 +346,8 @@ void main() {
 
   test('supports continuous treatments without an end date', () async {
     final repository = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
     );
@@ -353,6 +380,8 @@ void main() {
       );
       final databasePath = path.join(directory.path, 'medications.db');
       final firstRepository = MedicationRepository(
+        access: testMedicationAccess(),
+        allowIsolatedMigration: true,
         databaseFactory: databaseFactoryFfi,
         databasePath: databasePath,
       );
@@ -369,6 +398,8 @@ void main() {
       await firstRepository.close();
 
       final reopenedRepository = MedicationRepository(
+        access: testMedicationAccess(),
+        allowIsolatedMigration: true,
         databaseFactory: databaseFactoryFfi,
         databasePath: databasePath,
       );
@@ -398,6 +429,8 @@ void main() {
     await malformedDatabase.close();
 
     final repository = MedicationRepository(
+      access: testMedicationAccess(),
+      allowIsolatedMigration: true,
       databaseFactory: databaseFactoryFfi,
       databasePath: databasePath,
     );

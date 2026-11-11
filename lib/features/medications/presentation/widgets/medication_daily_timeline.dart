@@ -38,7 +38,7 @@ class MedicationDailyTimeline extends StatelessWidget {
         ),
         child: const Column(
           children: [
-            Icon(Icons.event_available_outlined, color: _muted, size: 28),
+            Icon(Icons.event_available_outlined, color: _teal, size: 40),
             SizedBox(height: 9),
             Text(
               'Aucune prise prévue pour cette journée.',
@@ -93,70 +93,74 @@ class _TimelineOccurrence extends StatelessWidget {
         occurrence.status == MedicationOccurrenceStatus.postponed;
     final statusColor = medicationOccurrenceColor(occurrence);
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 48,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 18),
-            child: Text(
-              occurrence.effectiveTime,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: _muted,
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 50,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 18),
+              child: Text(
+                occurrence.effectiveTime,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                  fontWeight: FontWeight.w700,
+                  color: _ink,
+                ),
               ),
             ),
           ),
-        ),
-        SizedBox(
-          width: 18,
-          child: Column(
-            children: [
-              Container(
-                width: 11,
-                height: 11,
-                margin: const EdgeInsets.only(top: 20),
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: statusColor.withValues(alpha: 0.22),
-                      blurRadius: 5,
-                    ),
-                  ],
-                ),
-              ),
-              if (!isLast)
+          SizedBox(
+            width: 18,
+            child: Column(
+              children: [
                 Container(
-                  width: 2,
-                  height: canConfirm ? 140 : 70,
-                  margin: const EdgeInsets.only(top: 5),
-                  color: const Color(0xFFDCEAE8),
+                  width: 11,
+                  height: 11,
+                  margin: const EdgeInsets.only(top: 20),
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: statusColor.withValues(alpha: 0.22),
+                        blurRadius: 5,
+                      ),
+                    ],
+                  ),
                 ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _MedicationOccurrenceCard(
-              occurrence: occurrence,
-              busy: busy,
-              statusColor: statusColor,
-              onOpen: onOpen,
-              onTaken: onTaken,
-              onPostpone: onPostpone,
-              onIgnore: onIgnore,
-              canConfirm: canConfirm,
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      margin: const EdgeInsets.only(top: 5),
+                      color: const Color(0xFFDCEAE8),
+                    ),
+                  ),
+              ],
             ),
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _MedicationOccurrenceCard(
+                occurrence: occurrence,
+                busy: busy,
+                statusColor: statusColor,
+                onOpen: onOpen,
+                onTaken: onTaken,
+                onPostpone: onPostpone,
+                onIgnore: onIgnore,
+                canConfirm: canConfirm,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -184,10 +188,10 @@ class _MedicationOccurrenceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
+    padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(24),
       border: Border.all(color: const Color(0xFFEAF0F4)),
       boxShadow: [
         BoxShadow(
@@ -225,8 +229,6 @@ class _MedicationOccurrenceCard extends StatelessWidget {
                   children: [
                     Text(
                       occurrence.medicationName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -236,8 +238,6 @@ class _MedicationOccurrenceCard extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       occurrence.dosage,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 12, color: _muted),
                     ),
                   ],
@@ -262,8 +262,6 @@ class _MedicationOccurrenceCard extends StatelessWidget {
             Flexible(
               child: Text(
                 occurrence.statusLabel(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,

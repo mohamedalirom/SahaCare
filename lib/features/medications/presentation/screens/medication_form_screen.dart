@@ -5,9 +5,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/medication_catalog_repository.dart';
 import '../../data/medication_repository.dart';
+import '../../data/services/medication_access.dart';
 import '../../domain/entities/medication.dart';
 import '../widgets/autocomplete_medication_field.dart';
 import '../widgets/medication_stock_form.dart';
+import '../../domain/entities/prescription_scan.dart';
+import '../../data/services/prescription_scan_session.dart';
+import '../../domain/entities/medication_text_normalizer.dart';
 
 class MedicationFormScreen extends StatefulWidget {
   const MedicationFormScreen({
@@ -15,11 +19,15 @@ class MedicationFormScreen extends StatefulWidget {
     this.medicationId,
     this.repository,
     this.catalogRepository,
+    this.prescriptionDraft,
+    this.scanSessionValid,
   });
 
   final int? medicationId;
   final MedicationRepository? repository;
   final MedicationCatalogRepository? catalogRepository;
+  final PrescriptionDraft? prescriptionDraft;
+  final bool Function()? scanSessionValid;
 
   @override
   State<MedicationFormScreen> createState() => _MedicationFormScreenState();
@@ -45,14 +53,60 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
   String? _selectedPresentation;
   int _weekdaysMask = 127;
   bool _noEndDate = false;
+  bool _scanReviewed = false;
+  String? _scanDuplicateApprovedFor;
+  bool _scanChecking = false;
+  MedicationLease? _editingLease;
+  bool _editingSessionValid() {
+    try {
+      if (_editingLease == null) throw const MedicationAccessDenied();
+      _editingLease!.check();
+      return true;
+    } on MedicationAccessDenied {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Session modifiée : rouvrez le formulaire.'),
+          ),
+        );
+      }
+      return false;
+    }
+  }
+
+  bool _scanValid() {
+    final session = PrescriptionScanSession.current();
+    return widget.scanSessionValid?.call() ??
+        (session.canImport &&
+            session.key == widget.prescriptionDraft?.sessionKey);
+  }
 
   bool get _isEditing => widget.medicationId != null;
 
   @override
   void initState() {
     super.initState();
+    try {
+      _editingLease = _repository.access.capture();
+    } on MedicationAccessDenied {
+      /* The route gate handles production access. */
+    }
     if (_isEditing) {
       _loadMedication();
+    } else if (widget.prescriptionDraft case final draft?) {
+      _nameController.text = draft.name;
+      _dosageController.text = draft.dosage;
+      _scheduleTimes.addAll(draft.times);
+      _weekdaysMask = draft.weekdaysMask;
+      _selectedActiveIngredient = draft.activeIngredient;
+      _selectedPresentation = draft.presentation;
+      _reminderEnabled = false;
+      if (draft.startDate != null) {
+        _startDateController.text = _formatDate(draft.startDate!);
+      }
+      if (draft.endDate != null) {
+        _endDateController.text = _formatDate(draft.endDate!);
+      }
     }
   }
 
@@ -190,6 +244,41 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
   }
 
   Future<void> _saveMedication() async {
+    if (_saving || _scanChecking) return;
+    try {
+      if (_editingLease == null) throw const MedicationAccessDenied();
+      _editingLease!.check();
+    } on MedicationAccessDenied {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Session modifiée : rouvrez le formulaire.'),
+        ),
+      );
+      return;
+    }
+    if (widget.prescriptionDraft != null) {
+      final valid = _scanValid();
+      if (!valid) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Import bloqué : session changée ou données non isolées par compte.',
+            ),
+          ),
+        );
+        return;
+      }
+      if (!_scanReviewed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Vérifiez et confirmez les champs issus de l’ordonnance.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
     if (!_formKey.currentState!.validate()) return;
     if (_scheduleTimes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -217,6 +306,62 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
       );
       return;
     }
+    final duplicateKey = normalizeMedicationText(_nameController.text)
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (widget.prescriptionDraft != null &&
+        _scanDuplicateApprovedFor != duplicateKey) {
+      setState(() => _scanChecking = true);
+      try {
+        final existing = await _repository.getAll();
+        if (!mounted) return;
+        if (existing.any(
+          (m) =>
+              normalizeMedicationText(m.name)
+                  .replaceAll(RegExp(r'\s+'), ' ')
+                  .trim() ==
+              duplicateKey,
+        )) {
+          final approved = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Médicament déjà présent'),
+              content: const Text(
+                'Un traitement porte déjà ce nom. Vérifiez qu’il ne s’agit pas d’un doublon avant de continuer.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Annuler'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Ajouter malgré le doublon'),
+                ),
+              ],
+            ),
+          );
+          if (approved != true || !mounted) return;
+          _scanDuplicateApprovedFor = duplicateKey;
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Vérification des doublons impossible. Aucun traitement ajouté.',
+              ),
+            ),
+          );
+        }
+        return;
+      } finally {
+        if (mounted) setState(() => _scanChecking = false);
+      }
+      if (!_scanValid()) return;
+    }
+    if (widget.prescriptionDraft != null && !_scanValid()) return;
+    if (!_editingSessionValid()) return;
     setState(() => _saving = true);
 
     final medication = Medication(
@@ -257,7 +402,11 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
           backgroundColor: const Color(0xFF0D9488),
         ),
       );
-      context.pop(true);
+      if (widget.prescriptionDraft != null) {
+        Navigator.of(context).pop(true);
+      } else {
+        context.pop(true);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -273,7 +422,8 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
   @override
   Widget build(BuildContext context) {
     return MedicationScaffold(
-      manageNotifications: widget.repository == null,
+      manageNotifications:
+          widget.repository == null && widget.prescriptionDraft == null,
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -319,6 +469,17 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
                     ),
                   ),
                   const SizedBox(height: 25),
+                  if (widget.prescriptionDraft != null) ...[
+                    const Text(
+                      'Préremplissage issu d’un scan : vérifiez chaque valeur. Aucun rappel ni suivi de stock n’est activé automatiquement.',
+                      style: TextStyle(color: Color(0xFFB45309), fontSize: 13),
+                    ),
+                    if (widget.prescriptionDraft!.durationDays != null)
+                      Text(
+                        'Durée repérée et revue : ${widget.prescriptionDraft!.durationDays} jour(s). Choisissez les dates exactes ; aucune date de début n’est supposée.',
+                      ),
+                    const SizedBox(height: 16),
+                  ],
                   if (_isEditing)
                     _textField(
                       label: 'Nom du médicament',
@@ -331,6 +492,7 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
                     AutocompleteMedicationField(
                       controller: _nameController,
                       catalogRepository: widget.catalogRepository,
+                      localOnly: widget.prescriptionDraft != null,
                       onSuggestionSelected: (suggestion) {
                         setState(() {
                           _selectedActiveIngredient =
@@ -349,7 +511,7 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
                         return null;
                       },
                     ),
-                  if (_isEditing &&
+                  if ((_isEditing || widget.prescriptionDraft != null) &&
                       (_selectedActiveIngredient != null ||
                           _selectedPresentation != null)) ...[
                     const SizedBox(height: 8),
@@ -463,6 +625,21 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
                     presentation: _selectedPresentation,
                   ),
                   const SizedBox(height: 20),
+                  if (widget.prescriptionDraft != null)
+                    Material(
+                      color: Colors.transparent,
+                      child: CheckboxListTile(
+                        key: const ValueKey('scan-final-review'),
+                        value: _scanReviewed,
+                        onChanged: (value) =>
+                            setState(() => _scanReviewed = value ?? false),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'J’ai vérifié le nom, le dosage, les horaires, les jours et les dates avant l’enregistrement.',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ),
                   SizedBox(
                     height: 52,
                     child: ElevatedButton.icon(
@@ -473,7 +650,9 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      onPressed: _saving ? null : _saveMedication,
+                      onPressed: _saving || _scanChecking
+                          ? null
+                          : _saveMedication,
                       icon: _saving
                           ? const SizedBox(
                               width: 18,

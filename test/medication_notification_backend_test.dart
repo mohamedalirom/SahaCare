@@ -57,6 +57,10 @@ void main() {
     expect(arguments['matchDateTimeComponents'], isNull);
     expect(arguments['title'], 'Rappel SahaCare');
     expect(
+      (arguments['body'] as String).toLowerCase(),
+      isNot(contains('médicament')),
+    );
+    expect(
       calls.any((c) => c.method == 'requestNotificationsPermission'),
       isFalse,
     );

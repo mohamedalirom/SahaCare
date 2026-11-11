@@ -1,3 +1,5 @@
+import 'helpers/medication_test_access.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,7 +13,7 @@ void main() {
     'Chrome shows Web Push limitation without mobile API or SQLite access',
     (tester) async {
       final service = MedicationNotificationService(
-        repository: MedicationRepository(),
+        repository: MedicationRepository(access: testMedicationAccess()),
         backend: NativeMedicationNotificationBackend(),
       );
       addTearDown(service.dispose);

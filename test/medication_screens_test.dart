@@ -1,3 +1,5 @@
+import 'helpers/medication_test_access.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -238,6 +240,8 @@ void main() {
 
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('Doliprane'), 100);
+      await tester.pumpAndSettle();
       expect(find.text('Doliprane'), findsOneWidget);
       expect(find.text('500 mg • 08:00'), findsOneWidget);
       expect(find.text('Substance active : Paracétamol'), findsOneWidget);
@@ -246,14 +250,15 @@ void main() {
       await tester.tap(find.text('Doliprane'));
       await tester.pumpAndSettle();
       expect(find.text('Détail du traitement'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('500 mg'),
-        150,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.text('500 mg'), findsOneWidget);
-      expect(find.text('Paracétamol'), findsOneWidget);
-      expect(find.text('500 mg • Comprimé'), findsOneWidget);
+      for (final text in ['Paracétamol', '500 mg • Comprimé', '500 mg']) {
+        final field = find.text(text);
+        await tester.scrollUntilVisible(
+          field,
+          150,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(field, findsOneWidget);
+      }
       await tester.scrollUntilVisible(
         find.text('Horaires de prise'),
         100,
@@ -268,7 +273,13 @@ void main() {
         -150,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.tap(find.text('Modifier le traitement'));
+      final editButton = find.ancestor(
+        of: find.text('Modifier le traitement'),
+        matching: find.byType(OutlinedButton),
+      );
+      await Scrollable.ensureVisible(tester.element(editButton), alignment: .5);
+      await tester.pumpAndSettle();
+      await tester.tap(editButton);
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byType(TextFormField).first,
@@ -367,6 +378,10 @@ void main() {
         findsOneWidget,
       );
 
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('open-medication-calendar')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('open-medication-calendar')));
       await tester.pumpAndSettle();
       expect(find.text('Calendrier thérapeutique'), findsOneWidget);
@@ -680,6 +695,8 @@ void main() {
 
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Traitement actif'), 100);
+    await tester.pumpAndSettle();
     expect(find.text('Traitement actif'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Traitement terminé'), 100);
     await tester.pumpAndSettle();
@@ -688,6 +705,8 @@ void main() {
     await tester.scrollUntilVisible(find.text('Terminés'), -100);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Terminés'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Traitements terminés'), -100);
     await tester.pumpAndSettle();
     expect(find.text('Traitements terminés'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Traitement terminé'), 100);
@@ -702,7 +721,8 @@ class _MemoryMedicationRepository extends MedicationRepository {
     Medication medication, {
     List<Medication> additional = const [],
     this._occurrences = const [],
-  }) : _medications = [medication, ...additional];
+  }) : _medications = [medication, ...additional],
+       super(access: testMedicationAccess());
 
   final List<Medication> _medications;
   final List<MedicationOccurrence> _occurrences;

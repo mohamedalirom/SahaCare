@@ -230,7 +230,12 @@ class _MedicationScheduleScreenState extends State<MedicationScheduleScreen> {
       elevation: 0,
       title: const Text(
         'Calendrier thérapeutique',
-        style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: Color(0xFF0F172A),
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -.4,
+        ),
       ),
       iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
     ),
@@ -252,7 +257,15 @@ class _MedicationScheduleScreenState extends State<MedicationScheduleScreen> {
               const SizedBox(height: 22),
               _dailyHeading(),
               const SizedBox(height: 12),
-              _dailySchedule(),
+              AnimatedSwitcher(
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 180),
+                child: KeyedSubtree(
+                  key: ValueKey(_selectedDate),
+                  child: _dailySchedule(),
+                ),
+              ),
             ],
           ),
   );
@@ -265,7 +278,7 @@ class _MedicationScheduleScreenState extends State<MedicationScheduleScreen> {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(26),
       boxShadow: [
         BoxShadow(
           color: const Color(0xFF0D9488).withValues(alpha: 0.14),
@@ -277,16 +290,30 @@ class _MedicationScheduleScreenState extends State<MedicationScheduleScreen> {
     child: Row(
       children: [
         Container(
-          width: 46,
-          height: 46,
+          width: 62,
+          height: 70,
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.16),
             borderRadius: BorderRadius.circular(15),
           ),
-          child: const Icon(
-            Icons.calendar_month_rounded,
-            color: Colors.white,
-            size: 24,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.calendar_month_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
+              Text(
+                '${_selectedDate.day}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w800,
+                  height: 1.2,
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(width: 13),
@@ -295,22 +322,23 @@ class _MedicationScheduleScreenState extends State<MedicationScheduleScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Votre planning de prises',
+                'Votre rythme de soin',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 16,
+                  fontSize: 21,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               SizedBox(height: 4),
               Text(
-                'Consultez et suivez vos traitements',
+                'Un jour à la fois, prenez soin de vous.',
                 style: TextStyle(color: Color(0xFFD9F6F1), fontSize: 12),
               ),
             ],
           ),
         ),
-        if (SupabaseConfig.isDemoMode)
+        if (SupabaseConfig.isDemoMode &&
+            MediaQuery.sizeOf(context).width >= 390)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
             decoration: BoxDecoration(
@@ -354,25 +382,21 @@ class _MedicationScheduleScreenState extends State<MedicationScheduleScreen> {
   );
 
   Widget _viewSelector() => SegmentedButton<_CalendarView>(
+    showSelectedIcon: false,
+    expandedInsets: EdgeInsets.zero,
     segments: const [
-      ButtonSegment(
-        value: _CalendarView.day,
-        icon: Icon(Icons.view_day_outlined),
-        label: Text('Jour'),
-      ),
-      ButtonSegment(
-        value: _CalendarView.week,
-        icon: Icon(Icons.view_week_outlined),
-        label: Text('Semaine'),
-      ),
-      ButtonSegment(
-        value: _CalendarView.month,
-        icon: Icon(Icons.calendar_month_outlined),
-        label: Text('Mois'),
-      ),
+      ButtonSegment(value: _CalendarView.day, label: Text('Jour')),
+      ButtonSegment(value: _CalendarView.week, label: Text('Semaine')),
+      ButtonSegment(value: _CalendarView.month, label: Text('Mois')),
     ],
     selected: {_view},
     style: ButtonStyle(
+      padding: WidgetStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
+      ),
+      shape: WidgetStateProperty.all(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
       backgroundColor: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.selected)
             ? const Color(0xFF0D9488)
@@ -396,41 +420,62 @@ class _MedicationScheduleScreenState extends State<MedicationScheduleScreen> {
       _CalendarView.day => _formatDate(_selectedDate),
       _CalendarView.week =>
         '${_formatDate(_periodStart)} – ${_formatDate(_periodEnd)}',
-      _CalendarView.month =>
-        '${_monthNames[_selectedDate.month - 1]} ${_selectedDate.year}',
+      _CalendarView.month => 'Sélectionnez une journée',
     };
-    return Row(
-      children: [
-        IconButton(
-          tooltip: 'Période précédente',
-          onPressed: () => _movePeriod(-1),
-          icon: const Icon(Icons.chevron_left),
-        ),
-        Expanded(
-          child: Text(
-            title,
-            textAlign: TextAlign.center,
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        children: [
+          Text(
+            '${_monthNames[_selectedDate.month - 1]} ${_selectedDate.year}',
             style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
               color: Color(0xFF0F172A),
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -.8,
             ),
           ),
-        ),
-        IconButton(
-          tooltip: 'Période suivante',
-          onPressed: () => _movePeriod(1),
-          icon: const Icon(Icons.chevron_right),
-        ),
-        IconButton(
-          tooltip: 'Aujourd’hui',
-          onPressed: () {
-            setState(() => _selectedDate = DateUtils.dateOnly(DateTime.now()));
-            _loadPeriod();
-          },
-          icon: const Icon(Icons.today_outlined, color: Color(0xFF0D9488)),
-        ),
-      ],
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Période précédente',
+                onPressed: () => _movePeriod(-1),
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Période suivante',
+                onPressed: () => _movePeriod(1),
+                icon: const Icon(Icons.chevron_right),
+              ),
+              IconButton(
+                tooltip: 'Aujourd’hui',
+                onPressed: () {
+                  setState(
+                    () => _selectedDate = DateUtils.dateOnly(DateTime.now()),
+                  );
+                  _loadPeriod();
+                },
+                icon: const Icon(
+                  Icons.today_outlined,
+                  color: Color(0xFF0D9488),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
