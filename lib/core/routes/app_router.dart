@@ -232,8 +232,9 @@ final GoRouter appRouter = GoRouter(
                   path: 'statistics',
                   name: 'medication-statistics',
                   parentNavigatorKey: rootNavigatorKey,
-                  builder: (context, state) =>
-                      const MedicationStatisticsScreen(),
+                  builder: (context, state) => MedicationScopeGate(
+                    child: const MedicationStatisticsScreen(),
+                  ),
                 ),
                 GoRoute(
                   path: 'reminders',
