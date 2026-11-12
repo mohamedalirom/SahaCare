@@ -1,7 +1,30 @@
-import 'package:flutter/material.dart';
+import '../widgets/medication_scaffold.dart';
 
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../core/config/supabase_config.dart';
 import '../../data/medication_repository.dart';
-import '../../domain/entities/medication.dart';
+import '../../domain/entities/medication_occurrence.dart';
+import '../../domain/entities/medication_stock.dart';
+import '../widgets/medication_calendar_widgets.dart';
+
+enum _CalendarView { day, week, month }
+
+const _monthNames = [
+  'janvier',
+  'février',
+  'mars',
+  'avril',
+  'mai',
+  'juin',
+  'juillet',
+  'août',
+  'septembre',
+  'octobre',
+  'novembre',
+  'décembre',
+];
 
 class MedicationScheduleScreen extends StatefulWidget {
   const MedicationScheduleScreen({super.key, this.repository});
@@ -16,141 +39,538 @@ class MedicationScheduleScreen extends StatefulWidget {
 class _MedicationScheduleScreenState extends State<MedicationScheduleScreen> {
   MedicationRepository get _repository =>
       widget.repository ?? MedicationRepository.instance;
-  late Future<List<Medication>> _medications;
+
+  DateTime _selectedDate = DateUtils.dateOnly(DateTime.now());
+  _CalendarView _view = _CalendarView.month;
+  List<MedicationOccurrence> _occurrences = const [];
+  bool _loading = true;
+  Object? _loadError;
+  final Set<int> _busyOccurrenceIds = {};
+  int _loadRequest = 0;
 
   @override
   void initState() {
     super.initState();
-    _medications = _repository.getAll();
+    _loadPeriod();
+  }
+
+  DateTime get _periodStart {
+    return switch (_view) {
+      _CalendarView.day => _selectedDate,
+      _CalendarView.week => _selectedDate.subtract(
+        Duration(days: _selectedDate.weekday - 1),
+      ),
+      _CalendarView.month => DateTime(_selectedDate.year, _selectedDate.month),
+    };
+  }
+
+  DateTime get _periodEnd {
+    return switch (_view) {
+      _CalendarView.day => _selectedDate,
+      _CalendarView.week => _periodStart.add(const Duration(days: 6)),
+      _CalendarView.month => DateTime(
+        _selectedDate.year,
+        _selectedDate.month + 1,
+        0,
+      ),
+    };
+  }
+
+  Future<void> _loadPeriod() async {
+    final request = ++_loadRequest;
+    final start = _periodStart;
+    final end = _periodEnd;
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    try {
+      await _repository.ensureOccurrences(from: start, through: end);
+      final occurrences = await _repository.getOccurrences(
+        from: start,
+        through: end,
+      );
+      if (!mounted || request != _loadRequest) return;
+      setState(() {
+        _occurrences = occurrences;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted || request != _loadRequest) return;
+      setState(() {
+        _loadError = error;
+        _loading = false;
+      });
+    }
+  }
+
+  void _movePeriod(int amount) {
+    setState(() {
+      _selectedDate = switch (_view) {
+        _CalendarView.day => _selectedDate.add(Duration(days: amount)),
+        _CalendarView.week => _selectedDate.add(Duration(days: amount * 7)),
+        _CalendarView.month => _shiftMonth(_selectedDate, amount),
+      };
+    });
+    _loadPeriod();
+  }
+
+  DateTime _shiftMonth(DateTime date, int amount) {
+    final month = DateTime(date.year, date.month + amount);
+    final lastDay = DateTime(month.year, month.month + 1, 0).day;
+    return DateTime(
+      month.year,
+      month.month,
+      date.day.clamp(1, lastDay).toInt(),
+    );
+  }
+
+  void _selectDate(DateTime date) {
+    setState(() => _selectedDate = DateUtils.dateOnly(date));
+  }
+
+  Future<void> _openMedication(int medicationId) async {
+    await context.push<bool>('/medications/detail?id=$medicationId');
+    if (mounted) _loadPeriod();
+  }
+
+  Future<void> _updateOccurrence(
+    MedicationOccurrence occurrence,
+    Future<void> Function() update,
+  ) async {
+    setState(() => _busyOccurrenceIds.add(occurrence.id));
+    try {
+      await update();
+      final medication = await _repository.getById(occurrence.medicationId);
+      final stock = medication?.stock;
+      if (mounted &&
+          stock != null &&
+          stock.enabled &&
+          stock.alert != StockAlert.normal) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              stock.pendingAnomalies > 0
+                  ? 'Une prise a été confirmée sans débit complet du stock. Une anomalie reste à régulariser sur la fiche du médicament.'
+                  : 'Stock faible : ${stock.remaining.display} ${stock.unit.label}. Consultez la fiche du médicament.',
+            ),
+            backgroundColor: stock.pendingAnomalies > 0
+                ? const Color(0xFFDC2626)
+                : const Color(0xFFD97706),
+          ),
+        );
+      }
+      if (mounted) {
+        setState(() => _busyOccurrenceIds.remove(occurrence.id));
+      }
+      if (!mounted) return;
+      await _loadPeriod();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Impossible de mettre à jour la prise : $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      setState(() => _busyOccurrenceIds.remove(occurrence.id));
+    }
+  }
+
+  Future<void> _postponeOccurrence(MedicationOccurrence occurrence) async {
+    final startDate = DateUtils.dateOnly(occurrence.medicationStartDate);
+    final endDate = occurrence.medicationEndDate ?? DateTime(2100, 12, 31);
+    final initialDate = occurrence.effectiveDate.isBefore(startDate)
+        ? startDate
+        : occurrence.effectiveDate.isAfter(endDate)
+        ? endDate
+        : occurrence.effectiveDate;
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: startDate,
+      lastDate: endDate,
+      helpText: 'Choisir la date de report',
+    );
+    if (date == null || !mounted) return;
+    final parts = occurrence.effectiveTime.split(':');
+    final initialTime = TimeOfDay(
+      hour: int.parse(parts[0]),
+      minute: int.parse(parts[1]),
+    );
+    final time = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      helpText: 'Choisir l’heure de report',
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (time == null || !mounted) return;
+    final formattedTime =
+        '${time.hour.toString().padLeft(2, '0')}:'
+        '${time.minute.toString().padLeft(2, '0')}';
+    await _updateOccurrence(
+      occurrence,
+      () => _repository.postponeOccurrence(
+        occurrenceId: occurrence.id,
+        date: date,
+        time: formattedTime,
+      ),
+    );
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => MedicationScaffold(
+    manageNotifications: widget.repository == null,
     backgroundColor: const Color(0xFFF8FAFC),
     appBar: AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
       title: const Text(
-        'Horaires de prise',
-        style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold),
+        'Calendrier thérapeutique',
+        style: TextStyle(
+          color: Color(0xFF0F172A),
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -.4,
+        ),
       ),
       iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
     ),
-    body: FutureBuilder<List<Medication>>(
-      future: _medications,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const Center(
-            child: Text('Impossible de charger les horaires.'),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final today = DateUtils.dateOnly(DateTime.now());
-        final todayMedications = snapshot.data!.where((medication) {
-          final start = DateUtils.dateOnly(medication.startDate);
-          final end = DateUtils.dateOnly(medication.endDate);
-          return !today.isBefore(start) && !today.isAfter(end);
-        }).toList()..sort((a, b) => a.time.compareTo(b.time));
-
-        return ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            const Text(
-              'Planning du jour',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Consultez les heures prévues pour vos traitements.',
-              style: TextStyle(color: Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 25),
-            if (todayMedications.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: const Text(
-                  'Aucune prise prévue aujourd’hui.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xFF64748B)),
-                ),
-              )
-            else
-              ...todayMedications.map(
-                (medication) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _ScheduleCard(medication: medication),
+    body: _loadError != null
+        ? _loadErrorState()
+        : _loading
+        ? const Center(child: CircularProgressIndicator())
+        : ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 112),
+            children: [
+              _introCard(),
+              const SizedBox(height: 16),
+              _viewSelector(),
+              const SizedBox(height: 14),
+              _periodNavigation(),
+              const SizedBox(height: 10),
+              if (_view == _CalendarView.week) _weekSelector(),
+              if (_view == _CalendarView.month) _monthCalendar(),
+              const SizedBox(height: 22),
+              _dailyHeading(),
+              const SizedBox(height: 12),
+              AnimatedSwitcher(
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 180),
+                child: KeyedSubtree(
+                  key: ValueKey(_selectedDate),
+                  child: _dailySchedule(),
                 ),
               ),
-          ],
-        );
-      },
-    ),
+            ],
+          ),
   );
-}
 
-class _ScheduleCard extends StatelessWidget {
-  const _ScheduleCard({required this.medication});
-
-  final Medication medication;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
+  Widget _introCard() => Container(
+    padding: const EdgeInsets.all(17),
     decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: const Color(0xFFE2E8F0)),
+      gradient: const LinearGradient(
+        colors: [Color(0xFF0D9488), Color(0xFF0F766E)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(26),
+      boxShadow: [
+        BoxShadow(
+          color: const Color(0xFF0D9488).withValues(alpha: 0.14),
+          blurRadius: 18,
+          offset: const Offset(0, 7),
+        ),
+      ],
     ),
     child: Row(
       children: [
         Container(
-          width: 52,
-          height: 52,
+          width: 62,
+          height: 70,
           decoration: BoxDecoration(
-            color: const Color(0xFFCCFBF1),
-            borderRadius: BorderRadius.circular(14),
+            color: Colors.white.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(15),
           ),
-          child: const Icon(Icons.access_time, color: Color(0xFF0D9488)),
-        ),
-        const SizedBox(width: 15),
-        Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                medication.time,
-                style: const TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
-                ),
+              const Icon(
+                Icons.calendar_month_rounded,
+                color: Colors.white,
+                size: 16,
               ),
-              const SizedBox(height: 4),
               Text(
-                '${medication.name} • ${medication.dosage}',
-                style: const TextStyle(color: Color(0xFF64748B)),
+                '${_selectedDate.day}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w800,
+                  height: 1.2,
+                ),
               ),
             ],
           ),
         ),
-        if (medication.reminderEnabled)
-          const Icon(
-            Icons.notifications_active_outlined,
-            color: Color(0xFF0D9488),
+        const SizedBox(width: 13),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Votre rythme de soin',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Un jour à la fois, prenez soin de vous.',
+                style: TextStyle(color: Color(0xFFD9F6F1), fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        if (SupabaseConfig.isDemoMode &&
+            MediaQuery.sizeOf(context).width >= 390)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              'DÉMO LOCALE',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
           ),
       ],
     ),
   );
+
+  Widget _loadErrorState() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Impossible de charger le calendrier thérapeutique.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFFB91C1C)),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _loadPeriod,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Réessayer'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _viewSelector() => SegmentedButton<_CalendarView>(
+    showSelectedIcon: false,
+    expandedInsets: EdgeInsets.zero,
+    segments: const [
+      ButtonSegment(value: _CalendarView.day, label: Text('Jour')),
+      ButtonSegment(value: _CalendarView.week, label: Text('Semaine')),
+      ButtonSegment(value: _CalendarView.month, label: Text('Mois')),
+    ],
+    selected: {_view},
+    style: ButtonStyle(
+      padding: WidgetStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
+      ),
+      shape: WidgetStateProperty.all(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      backgroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? const Color(0xFF0D9488)
+            : Colors.white,
+      ),
+      foregroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? Colors.white
+            : const Color(0xFF475569),
+      ),
+      side: WidgetStateProperty.all(const BorderSide(color: Color(0xFFE2E8F0))),
+    ),
+    onSelectionChanged: (selection) {
+      setState(() => _view = selection.first);
+      _loadPeriod();
+    },
+  );
+
+  Widget _periodNavigation() {
+    final title = switch (_view) {
+      _CalendarView.day => _formatDate(_selectedDate),
+      _CalendarView.week =>
+        '${_formatDate(_periodStart)} – ${_formatDate(_periodEnd)}',
+      _CalendarView.month => 'Sélectionnez une journée',
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        children: [
+          Text(
+            '${_monthNames[_selectedDate.month - 1]} ${_selectedDate.year}',
+            style: const TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -.8,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Période précédente',
+                onPressed: () => _movePeriod(-1),
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Période suivante',
+                onPressed: () => _movePeriod(1),
+                icon: const Icon(Icons.chevron_right),
+              ),
+              IconButton(
+                tooltip: 'Aujourd’hui',
+                onPressed: () {
+                  setState(
+                    () => _selectedDate = DateUtils.dateOnly(DateTime.now()),
+                  );
+                  _loadPeriod();
+                },
+                icon: const Icon(
+                  Icons.today_outlined,
+                  color: Color(0xFF0D9488),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _weekSelector() {
+    return MedicationWeekSelector(
+      weekStart: _periodStart,
+      selectedDate: _selectedDate,
+      occurrences: _occurrences,
+      onSelected: _selectDate,
+    );
+  }
+
+  Widget _monthCalendar() {
+    return MedicationMonthCalendar(
+      month: _selectedDate,
+      selectedDate: _selectedDate,
+      occurrences: _occurrences,
+      onSelected: _selectDate,
+    );
+  }
+
+  Widget _dailyHeading() {
+    final count = _countForDate(_selectedDate);
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            'Planning du ${_selectedDate.day.toString().padLeft(2, '0')}/'
+            '${_selectedDate.month.toString().padLeft(2, '0')}/'
+            '${_selectedDate.year}',
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE6F7F5),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '$count prise${count == 1 ? '' : 's'}',
+            style: const TextStyle(
+              color: Color(0xFF0D9488),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _dailySchedule() {
+    final dayOccurrences =
+        _occurrences
+            .where(
+              (occurrence) =>
+                  DateUtils.isSameDay(occurrence.effectiveDate, _selectedDate),
+            )
+            .toList()
+          ..sort((first, second) {
+            final timeOrder = first.effectiveTime.compareTo(
+              second.effectiveTime,
+            );
+            return timeOrder != 0
+                ? timeOrder
+                : first.medicationName.compareTo(second.medicationName);
+          });
+    return MedicationDailyTimeline(
+      occurrences: dayOccurrences,
+      busyOccurrenceIds: _busyOccurrenceIds,
+      onOpen: _openMedication,
+      onTaken: (occurrence) => _updateOccurrence(
+        occurrence,
+        () => _repository.markOccurrenceTaken(occurrence.id),
+      ),
+      onPostpone: _postponeOccurrence,
+      onIgnore: (occurrence) => _updateOccurrence(
+        occurrence,
+        () => _repository.ignoreOccurrence(occurrence.id),
+      ),
+    );
+  }
+
+  int _countForDate(DateTime date) => _occurrences
+      .where(
+        (occurrence) => DateUtils.isSameDay(occurrence.effectiveDate, date),
+      )
+      .length;
+
+  String _formatDate(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}/'
+      '${date.month.toString().padLeft(2, '0')}/${date.year}';
 }

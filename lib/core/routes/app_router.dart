@@ -1,3 +1,8 @@
+import 'package:flutter/foundation.dart';
+
+import '../../features/medications/data/services/medication_access.dart';
+import '../../features/medications/presentation/widgets/medication_scope_gate.dart';
+
 import 'package:flutter/widgets.dart' show GlobalKey, NavigatorState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,6 +24,7 @@ import '../../features/auth/presentation/screens/signup_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/biometric_lock_screen.dart';
 import '../../features/auth/services/auth_service.dart';
+import '../config/supabase_config.dart';
 
 import '../../features/profil/presentation/screens/profile_screen.dart';
 import '../../features/profil/presentation/screens/edit_profile_screen.dart';
@@ -30,6 +36,9 @@ import '../../features/medications/presentation/screens/medication_detail_screen
 import '../../features/medications/presentation/screens/edit_medication_screen.dart';
 import '../../features/medications/presentation/screens/medication_schedule_screen.dart';
 import '../../features/medications/presentation/screens/medication_reminder_screen.dart';
+import '../../features/medications/presentation/screens/medication_statistics_screen.dart';
+import '../../features/medications/presentation/screens/medication_report_screen.dart';
+import '../../features/medications/presentation/screens/prescription_scan_screen.dart';
 
 import '../../features/health_tracking/domain/entities/health_measurement.dart';
 import '../../features/health_tracking/presentation/screens/add_measurement_screen.dart';
@@ -55,10 +64,19 @@ final shellKey5 = GlobalKey<NavigatorState>(debugLabel: 'shell5');
 /// Configuration principale du routeur avec GoRouter
 final GoRouter appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
-  initialLocation: '/profil',
+  initialLocation: SupabaseConfig.isDemoMode ? '/medications' : '/profil',
 
   // Se ré-évalue à chaque changement de session (connexion / déconnexion)
-  refreshListenable: AuthService.instance,
+  refreshListenable: Listenable.merge([
+    AuthService.instance,
+    MedicationAccess.instance,
+  ]),
+  observers: [
+    MedicationSessionNavigationObserver(
+      isMedicationRoute: () => appRouter.routeInformationProvider.value.uri.path
+          .startsWith('/medications'),
+    ),
+  ],
 
   // Global Session Redirect Guard
   redirect: (context, state) {
@@ -153,21 +171,26 @@ final GoRouter appRouter = GoRouter(
             GoRoute(
               path: '/medications',
               name: 'medications-dashboard',
-              builder: (context, state) => const MedicationsDashboardScreen(),
+              builder: (context, state) => MedicationScopeGate(
+                child: const MedicationsDashboardScreen(),
+              ),
               routes: [
                 GoRoute(
                   path: 'add',
                   name: 'medication-add',
                   parentNavigatorKey: rootNavigatorKey,
-                  builder: (context, state) => const AddMedicationScreen(),
+                  builder: (context, state) =>
+                      MedicationScopeGate(child: const AddMedicationScreen()),
                 ),
                 GoRoute(
                   path: 'detail',
                   name: 'medication-detail',
                   parentNavigatorKey: rootNavigatorKey,
-                  builder: (context, state) => MedicationDetailScreen(
-                    medicationId: int.tryParse(
-                      state.uri.queryParameters['id'] ?? '',
+                  builder: (context, state) => MedicationScopeGate(
+                    child: MedicationDetailScreen(
+                      medicationId: int.tryParse(
+                        state.uri.queryParameters['id'] ?? '',
+                      ),
                     ),
                   ),
                 ),
@@ -175,9 +198,11 @@ final GoRouter appRouter = GoRouter(
                   path: 'edit',
                   name: 'medication-edit',
                   parentNavigatorKey: rootNavigatorKey,
-                  builder: (context, state) => EditMedicationScreen(
-                    medicationId: int.tryParse(
-                      state.uri.queryParameters['id'] ?? '',
+                  builder: (context, state) => MedicationScopeGate(
+                    child: EditMedicationScreen(
+                      medicationId: int.tryParse(
+                        state.uri.queryParameters['id'] ?? '',
+                      ),
                     ),
                   ),
                 ),
@@ -185,13 +210,41 @@ final GoRouter appRouter = GoRouter(
                   path: 'schedule',
                   name: 'medication-schedule',
                   parentNavigatorKey: rootNavigatorKey,
-                  builder: (context, state) => const MedicationScheduleScreen(),
+                  builder: (context, state) => MedicationScopeGate(
+                    child: const MedicationScheduleScreen(),
+                  ),
+                ),
+                GoRoute(
+                  path: 'scan',
+                  name: 'medication-prescription-scan',
+                  parentNavigatorKey: rootNavigatorKey,
+                  builder: (context, state) => MedicationScopeGate(
+                    child: const PrescriptionScanScreen(),
+                  ),
+                ),
+                GoRoute(
+                  path: 'report',
+                  name: 'medication-report',
+                  parentNavigatorKey: rootNavigatorKey,
+                  builder: (context, state) => MedicationScopeGate(
+                    child: const MedicationReportScreen(),
+                  ),
+                ),
+                GoRoute(
+                  path: 'statistics',
+                  name: 'medication-statistics',
+                  parentNavigatorKey: rootNavigatorKey,
+                  builder: (context, state) => MedicationScopeGate(
+                    child: const MedicationStatisticsScreen(),
+                  ),
                 ),
                 GoRoute(
                   path: 'reminders',
                   name: 'medication-reminders',
                   parentNavigatorKey: rootNavigatorKey,
-                  builder: (context, state) => const MedicationReminderScreen(),
+                  builder: (context, state) => MedicationScopeGate(
+                    child: const MedicationReminderScreen(),
+                  ),
                 ),
               ],
             ),

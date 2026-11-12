@@ -1,3 +1,5 @@
+import 'medication_stock.dart';
+
 class Medication {
   const Medication({
     this.id,
@@ -5,8 +7,13 @@ class Medication {
     required this.dosage,
     required this.time,
     required this.startDate,
-    required this.endDate,
+    this.endDate,
     required this.reminderEnabled,
+    this.activeIngredient,
+    this.commercialPresentation,
+    this.scheduleTimes = const [],
+    this.weekdaysMask = 127,
+    this.stock,
   });
 
   final int? id;
@@ -14,26 +21,52 @@ class Medication {
   final String dosage;
   final String time;
   final DateTime startDate;
-  final DateTime endDate;
+  final DateTime? endDate;
   final bool reminderEnabled;
+  final String? activeIngredient;
+  final String? commercialPresentation;
+  final List<String> scheduleTimes;
+  final int weekdaysMask;
+  final MedicationStock? stock;
+
+  bool isActiveOn(DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    final start = DateTime(startDate.year, startDate.month, startDate.day);
+    final end = endDate == null
+        ? null
+        : DateTime(endDate!.year, endDate!.month, endDate!.day);
+    return !day.isBefore(start) && (end == null || !day.isAfter(end));
+  }
 
   Medication copyWith({
     int? id,
     String? name,
     String? dosage,
     String? time,
+    List<String>? scheduleTimes,
+    int? weekdaysMask,
     DateTime? startDate,
     DateTime? endDate,
+    bool clearEndDate = false,
     bool? reminderEnabled,
+    String? activeIngredient,
+    String? commercialPresentation,
+    MedicationStock? stock,
   }) {
     return Medication(
       id: id ?? this.id,
       name: name ?? this.name,
       dosage: dosage ?? this.dosage,
       time: time ?? this.time,
+      scheduleTimes: scheduleTimes ?? this.scheduleTimes,
+      weekdaysMask: weekdaysMask ?? this.weekdaysMask,
+      stock: stock ?? this.stock,
       startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
+      endDate: clearEndDate ? null : endDate ?? this.endDate,
       reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+      activeIngredient: activeIngredient ?? this.activeIngredient,
+      commercialPresentation:
+          commercialPresentation ?? this.commercialPresentation,
     );
   }
 
@@ -44,8 +77,10 @@ class Medication {
       'dosage': dosage,
       'time': time,
       'start_date': _dateToDatabase(startDate),
-      'end_date': _dateToDatabase(endDate),
+      'end_date': endDate == null ? null : _dateToDatabase(endDate!),
       'reminder_enabled': reminderEnabled ? 1 : 0,
+      'active_ingredient': activeIngredient,
+      'commercial_presentation': commercialPresentation,
     };
   }
 
@@ -56,8 +91,15 @@ class Medication {
       dosage: map['dosage'] as String,
       time: map['time'] as String,
       startDate: DateTime.parse(map['start_date'] as String),
-      endDate: DateTime.parse(map['end_date'] as String),
+      endDate: map['end_date'] == null
+          ? null
+          : DateTime.parse(map['end_date'] as String),
       reminderEnabled: map['reminder_enabled'] == 1,
+      activeIngredient: map['active_ingredient'] as String?,
+      commercialPresentation: map['commercial_presentation'] as String?,
+      scheduleTimes: (map['schedule_times'] as List<String>?) ?? const [],
+      weekdaysMask: map['weekdays_mask'] as int? ?? 127,
+      stock: map['stock'] as MedicationStock?,
     );
   }
 

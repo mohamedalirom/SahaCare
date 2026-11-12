@@ -28,16 +28,19 @@ class SupabaseConfig {
     defaultValue: 'io.supabase.sahacare://login-callback/',
   );
 
+  static const bool _localDemoRequested = bool.fromEnvironment(
+    'SAHACARE_LOCAL_DEMO',
+    defaultValue: false,
+  );
+
   static bool get isConfigured => url.isNotEmpty && anonKey.isNotEmpty;
 
-  /// Mode démo : uniquement en debug ET sans clés Supabase.
-  /// Permet à l'équipe de naviguer dans l'app sans backend.
-  /// Ne peut jamais être actif dans un build release (échec fermé).
-  static bool get isDemoMode => kDebugMode && !isConfigured;
+  /// Mode local opt-in, réservé au debug et isolé des données de production.
+  static bool get isDemoMode => kDebugMode && _localDemoRequested;
 
   /// Initialise Supabase si les clés sont fournies (sinon no-op).
   static Future<void> initialize() async {
-    if (!isConfigured) return;
+    if (!isConfigured || isDemoMode) return;
     await Supabase.initialize(url: url, publishableKey: anonKey);
   }
 }
