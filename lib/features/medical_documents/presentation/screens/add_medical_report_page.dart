@@ -21,7 +21,6 @@ class AddMedicalReportPage extends StatelessWidget {
       titleHint: 'Ex : Compte rendu d\'échographie',
       authorHint: 'Ex : Dr. Nabil Jaziri',
       noteHint: 'Conclusions, observations, recommandations…',
-      demoFileName: 'rapport_medical.pdf',
     );
   }
 }
