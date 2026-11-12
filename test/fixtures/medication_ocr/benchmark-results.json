@@ -1,0 +1,164 @@
+[
+  {
+    "fixture": "printed",
+    "mode": "original",
+    "exactNames": 2,
+    "expectedNames": 2,
+    "technicalIndex": 93,
+    "milliseconds": 559,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDafalgan\n\nNe pas utiliser comme prescription\n"
+  },
+  {
+    "fixture": "printed",
+    "mode": "contrast",
+    "exactNames": 2,
+    "expectedNames": 2,
+    "technicalIndex": 93,
+    "milliseconds": 304,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDafalgan\n\nNe pas utiliser comme prescription\n"
+  },
+  {
+    "fixture": "printed",
+    "mode": "document",
+    "exactNames": 2,
+    "expectedNames": 2,
+    "technicalIndex": 93,
+    "milliseconds": 302,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDafalgan\n\nNe pas utiliser comme prescription\n"
+  },
+  {
+    "fixture": "printed-shadow",
+    "mode": "original",
+    "exactNames": 0,
+    "expectedNames": 2,
+    "technicalIndex": 0,
+    "milliseconds": 137,
+    "text": ""
+  },
+  {
+    "fixture": "printed-shadow",
+    "mode": "contrast",
+    "exactNames": 2,
+    "expectedNames": 2,
+    "technicalIndex": 93,
+    "milliseconds": 355,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDafalgan\n\nNe pas utiliser comme prescription\n"
+  },
+  {
+    "fixture": "printed-shadow",
+    "mode": "document",
+    "exactNames": 2,
+    "expectedNames": 2,
+    "technicalIndex": 93,
+    "milliseconds": 336,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDafalgan\n\nNe pas utiliser comme prescription\n"
+  },
+  {
+    "fixture": "printed-small",
+    "mode": "original",
+    "exactNames": 0,
+    "expectedNames": 2,
+    "technicalIndex": 0,
+    "milliseconds": 11,
+    "text": ""
+  },
+  {
+    "fixture": "printed-small",
+    "mode": "contrast",
+    "exactNames": 0,
+    "expectedNames": 2,
+    "technicalIndex": 36,
+    "milliseconds": 441,
+    "text": "CHDONNANSE HGIVE = 1-51\nDilisaure\n\nDstahsn\n\nNz pas viiiser corme seesze pian\n"
+  },
+  {
+    "fixture": "printed-small",
+    "mode": "document",
+    "exactNames": 0,
+    "expectedNames": 2,
+    "technicalIndex": 50,
+    "milliseconds": 489,
+    "text": "GHDONNANE HGIUE = IRS]\nDuliviane\n\nDalalzsn\n\nN= pas wiiiser comme arcszr plian\n"
+  },
+  {
+    "fixture": "printed-blurred",
+    "mode": "original",
+    "exactNames": 1,
+    "expectedNames": 2,
+    "technicalIndex": 88,
+    "milliseconds": 322,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\nDafaigan\n"
+  },
+  {
+    "fixture": "printed-blurred",
+    "mode": "contrast",
+    "exactNames": 2,
+    "expectedNames": 2,
+    "technicalIndex": 93,
+    "milliseconds": 469,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDafalgan\n\nNe pas utiliser comme prescription\n"
+  },
+  {
+    "fixture": "printed-blurred",
+    "mode": "document",
+    "exactNames": 2,
+    "expectedNames": 2,
+    "technicalIndex": 92,
+    "milliseconds": 435,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDafalgan\n\nNe pas utiliser comme prescription\n"
+  },
+  {
+    "fixture": "handwriting-print",
+    "mode": "original",
+    "exactNames": 2,
+    "expectedNames": 2,
+    "technicalIndex": 93,
+    "milliseconds": 334,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDafalgan\n\nNe pas utiliser comme prescription\n"
+  },
+  {
+    "fixture": "handwriting-print",
+    "mode": "contrast",
+    "exactNames": 2,
+    "expectedNames": 2,
+    "technicalIndex": 93,
+    "milliseconds": 472,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDafalgan\n\nNe pas utiliser comme prescription\n"
+  },
+  {
+    "fixture": "handwriting-print",
+    "mode": "document",
+    "exactNames": 2,
+    "expectedNames": 2,
+    "technicalIndex": 92,
+    "milliseconds": 504,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDafalgan\n\nNe pas utiliser comme prescription\n"
+  },
+  {
+    "fixture": "handwriting-cursive",
+    "mode": "original",
+    "exactNames": 0,
+    "expectedNames": 2,
+    "technicalIndex": 78,
+    "milliseconds": 246,
+    "text": "- TEST\nn\n"
+  },
+  {
+    "fixture": "handwriting-cursive",
+    "mode": "contrast",
+    "exactNames": 2,
+    "expectedNames": 2,
+    "technicalIndex": 86,
+    "milliseconds": 627,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDafalgan\n\nNe pas utiliser comme prescription\n"
+  },
+  {
+    "fixture": "handwriting-cursive",
+    "mode": "document",
+    "exactNames": 1,
+    "expectedNames": 2,
+    "technicalIndex": 81,
+    "milliseconds": 521,
+    "text": "ORDONNANCE FICTIVE - TEST\nDoliprane\n\nDofalqon\n\nNe pas utiliser comme prescription\n"
+  }
+]

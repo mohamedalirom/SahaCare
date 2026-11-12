@@ -1,8 +1,13 @@
+import '../widgets/medication_scaffold.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/medication_repository.dart';
 import '../../domain/entities/medication.dart';
+import '../../domain/entities/medication_occurrence.dart';
+import '../widgets/medication_stock_section.dart';
+import '../widgets/medication_visuals.dart';
 
 class MedicationDetailScreen extends StatefulWidget {
   const MedicationDetailScreen({super.key, this.medicationId, this.repository});
@@ -18,6 +23,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   MedicationRepository get _repository =>
       widget.repository ?? MedicationRepository.instance;
   late Future<Medication?> _medication;
+  late Future<List<MedicationOccurrence>> _occurrences;
   bool _deleting = false;
   bool _hasChanges = false;
 
@@ -25,12 +31,19 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   void initState() {
     super.initState();
     _medication = _loadMedication();
+    _occurrences = _loadOccurrences();
   }
 
   Future<Medication?> _loadMedication() {
     final id = widget.medicationId;
     if (id == null) return Future.value(null);
     return _repository.getById(id);
+  }
+
+  Future<List<MedicationOccurrence>> _loadOccurrences() {
+    final id = widget.medicationId;
+    if (id == null) return Future.value(const []);
+    return _repository.getOccurrencesForMedication(id);
   }
 
   Future<void> _edit() async {
@@ -41,6 +54,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
       setState(() {
         _hasChanges = true;
         _medication = _loadMedication();
+        _occurrences = _loadOccurrences();
       });
     }
   }
@@ -86,8 +100,9 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFFF8FAFC),
+  Widget build(BuildContext context) => MedicationScaffold(
+    manageNotifications: widget.repository == null,
+    backgroundColor: MedicationColors.canvas,
     appBar: AppBar(
       leading: IconButton(
         onPressed: () => context.pop(_hasChanges),
@@ -122,17 +137,13 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
           children: [
             Center(
               child: Container(
-                width: 80,
-                height: 80,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFCCFBF1),
-                  shape: BoxShape.circle,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: MedicationColors.line),
                 ),
-                child: const Icon(
-                  Icons.medication_outlined,
-                  size: 42,
-                  color: Color(0xFF0D9488),
-                ),
+                padding: const EdgeInsets.all(8),
+                child: const MedicationIllustration(size: 86),
               ),
             ),
             const SizedBox(height: 15),
@@ -141,9 +152,10 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                 medication.name,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+                  fontSize: 27,
+                  letterSpacing: -.6,
+                  fontWeight: FontWeight.w800,
+                  color: MedicationColors.ink,
                 ),
               ),
             ),
@@ -155,6 +167,22 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
               ),
             ),
             const SizedBox(height: 20),
+            if (medication.activeIngredient case final ingredient?) ...[
+              _informationCard(
+                icon: Icons.science_outlined,
+                title: 'Substance active',
+                value: ingredient,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (medication.commercialPresentation case final presentation?) ...[
+              _informationCard(
+                icon: Icons.medication_outlined,
+                title: 'Présentation commerciale',
+                value: presentation,
+              ),
+              const SizedBox(height: 12),
+            ],
             OutlinedButton.icon(
               onPressed: _edit,
               style: OutlinedButton.styleFrom(
@@ -171,7 +199,14 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
-            const SizedBox(height: 25),
+            const SizedBox(height: 20),
+            MedicationStockSection(
+              medication: medication,
+              repository: _repository,
+              onConfigure: _edit,
+              onChanged: () => setState(() => _hasChanges = true),
+            ),
+            const SizedBox(height: 20),
             _informationCard(
               icon: Icons.science_outlined,
               title: 'Dosage',
@@ -180,8 +215,18 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
             const SizedBox(height: 12),
             _informationCard(
               icon: Icons.access_time,
-              title: 'Horaire de prise',
-              value: medication.time,
+              title: 'Horaires de prise',
+              value:
+                  (medication.scheduleTimes.isEmpty
+                          ? [medication.time]
+                          : medication.scheduleTimes)
+                      .join(' • '),
+            ),
+            const SizedBox(height: 12),
+            _informationCard(
+              icon: Icons.calendar_view_week_outlined,
+              title: 'Jours de prise',
+              value: _formatWeekdays(medication.weekdaysMask),
             ),
             const SizedBox(height: 12),
             _informationCard(
@@ -193,8 +238,12 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
             _informationCard(
               icon: Icons.event_outlined,
               title: 'Date de fin',
-              value: _formatDate(medication.endDate),
+              value: medication.endDate == null
+                  ? 'Sans date de fin'
+                  : _formatDate(medication.endDate!),
             ),
+            const SizedBox(height: 20),
+            _occurrenceHistory(),
             const SizedBox(height: 12),
             _informationCard(
               icon: Icons.notifications_outlined,
@@ -239,8 +288,8 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: const Color(0xFFE2E8F0)),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: MedicationColors.line),
     ),
     child: Row(
       children: [
@@ -248,7 +297,7 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: const Color(0xFFCCFBF1),
+            color: const Color(0xFFE5F5F0),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: const Color(0xFF0D9488)),
@@ -281,4 +330,65 @@ class _MedicationDetailScreenState extends State<MedicationDetailScreen> {
   String _formatDate(DateTime date) =>
       '${date.day.toString().padLeft(2, '0')}/'
       '${date.month.toString().padLeft(2, '0')}/${date.year}';
+
+  String _formatWeekdays(int mask) {
+    const labels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    final selected = [
+      for (var index = 0; index < labels.length; index++)
+        if (mask & (1 << index) != 0) labels[index],
+    ];
+    return selected.join(', ');
+  }
+
+  Widget _occurrenceHistory() => FutureBuilder<List<MedicationOccurrence>>(
+    future: _occurrences,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return const Text(
+          'Impossible de charger l’historique des prises.',
+          style: TextStyle(color: Color(0xFFB91C1C)),
+        );
+      }
+      if (!snapshot.hasData) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(12),
+            child: CircularProgressIndicator(),
+          ),
+        );
+      }
+      final occurrences = snapshot.data!;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Historique des prises',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (occurrences.isEmpty)
+            const Text(
+              'Aucune prise enregistrée pour le moment.',
+              style: TextStyle(color: Color(0xFF64748B)),
+            )
+          else
+            ...occurrences.map(
+              (occurrence) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _informationCard(
+                  icon: Icons.history,
+                  title:
+                      '${_formatDate(occurrence.effectiveDate)} • ${occurrence.effectiveTime}',
+                  value: occurrence.statusLabel(),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
+  );
 }

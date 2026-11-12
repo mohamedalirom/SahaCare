@@ -49,7 +49,8 @@ class AuthService extends ChangeNotifier {
   Future<void> initBiometricState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _isBiometricEnabled = prefs.getBool('sahacare.biometric_lock_enabled') ??
+      _isBiometricEnabled =
+          prefs.getBool('sahacare.biometric_lock_enabled') ??
           prefs.getBool('biometric_enabled') ??
           false;
     } catch (e) {
@@ -70,9 +71,22 @@ class AuthService extends ChangeNotifier {
 
   // Initialise l'écouteur d'événements auth une fois Supabase initialisé.
   void initAuthListener() {
+    if (SupabaseConfig.isDemoMode) {
+      _demoUser = const SessionUser(
+        id: 'local-demo-user',
+        email: 'local-demo@sahacare.invalid',
+        fullName: 'Session locale de démonstration',
+      );
+      _isBiometricUnlocked = true;
+      notifyListeners();
+      return;
+    }
+
     if (_subscription == null && SupabaseConfig.isConfigured) {
       try {
-        _subscription = _client.auth.onAuthStateChange.listen((_) => notifyListeners());
+        _subscription = _client.auth.onAuthStateChange.listen(
+          (_) => notifyListeners(),
+        );
       } catch (e) {
         debugPrint('Erreur auth subscription: $e');
       }
@@ -89,7 +103,7 @@ class AuthService extends ChangeNotifier {
     super.dispose();
   }
 
-  bool get _live => SupabaseConfig.isConfigured;
+  bool get _live => SupabaseConfig.isConfigured && !SupabaseConfig.isDemoMode;
   SupabaseClient get _client => Supabase.instance.client;
 
   SessionUser? get currentUser {
@@ -97,7 +111,8 @@ class AuthService extends ChangeNotifier {
       try {
         final user = _client.auth.currentUser;
         if (user == null) return null;
-        final name = user.userMetadata?['full_name'] ?? user.userMetadata?['name'];
+        final name =
+            user.userMetadata?['full_name'] ?? user.userMetadata?['name'];
         return SessionUser(
           id: user.id,
           email: user.email ?? '',
@@ -131,15 +146,27 @@ class AuthService extends ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Email / mot de passe
   // ---------------------------------------------------------------------------
-  Future<void> signInWithPassword({required String email, required String password}) async {
+  Future<void> signInWithPassword({
+    required String email,
+    required String password,
+  }) async {
     _ensureBackend();
     if (!_live) {
-      _demoUser = SessionUser(id: 'demo-user', email: email.trim(), fullName: 'Utilisateur démo');
+      _demoUser = SessionUser(
+        id: 'demo-user',
+        email: email.trim(),
+        fullName: 'Utilisateur démo',
+      );
       _isBiometricUnlocked = true;
       notifyListeners();
       return;
     }
-    await _guard(() => _client.auth.signInWithPassword(email: email.trim(), password: password));
+    await _guard(
+      () => _client.auth.signInWithPassword(
+        email: email.trim(),
+        password: password,
+      ),
+    );
     _isBiometricUnlocked = true;
     notifyListeners();
   }
@@ -153,7 +180,11 @@ class AuthService extends ChangeNotifier {
   }) async {
     _ensureBackend();
     if (!_live) {
-      _demoUser = SessionUser(id: 'demo-user', email: email.trim(), fullName: fullName.trim());
+      _demoUser = SessionUser(
+        id: 'demo-user',
+        email: email.trim(),
+        fullName: fullName.trim(),
+      );
       _isBiometricUnlocked = true;
       notifyListeners();
       return true;
@@ -204,7 +235,8 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Alias de [signInWithOAuth]
-  Future<void> signInWithProvider(OAuthProvider provider) => signInWithOAuth(provider);
+  Future<void> signInWithProvider(OAuthProvider provider) =>
+      signInWithOAuth(provider);
 
   Future<void> signInWithGoogle() => signInWithOAuth(OAuthProvider.google);
   Future<void> signInWithApple() => signInWithOAuth(OAuthProvider.apple);
@@ -246,15 +278,22 @@ class AuthService extends ChangeNotifier {
 
   String _translate(AuthException e) {
     final msg = e.message.toLowerCase();
-    if (msg.contains('invalid login credentials')) return 'Email ou mot de passe incorrect.';
-    if (msg.contains('email not confirmed')) return 'Veuillez confirmer votre e-mail avant de vous connecter.';
-    if (msg.contains('already registered') || msg.contains('already been registered')) {
+    if (msg.contains('invalid login credentials')) {
+      return 'Email ou mot de passe incorrect.';
+    }
+    if (msg.contains('email not confirmed')) {
+      return 'Veuillez confirmer votre e-mail avant de vous connecter.';
+    }
+    if (msg.contains('already registered') ||
+        msg.contains('already been registered')) {
       return 'Un compte existe dÃ©jÃ  avec cet e-mail.';
     }
     if (msg.contains('rate limit') || msg.contains('too many')) {
       return 'Trop de tentatives. RÃ©essayez dans quelques instants.';
     }
-    if (msg.contains('password')) return 'Mot de passe invalide (6 caractÃ¨res minimum).';
+    if (msg.contains('password')) {
+      return 'Mot de passe invalide (6 caractÃ¨res minimum).';
+    }
     return e.message;
   }
 }
