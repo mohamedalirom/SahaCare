@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/app_utils.dart';
+import '../../domain/entities/attached_file.dart';
 import '../../domain/entities/medical_document.dart';
+import '../screens/document_viewer_page.dart';
 
 /// Carte d'un document médical dans une liste (ordonnance, analyse, rapport)
 class DocumentCard extends StatelessWidget {
@@ -80,7 +82,12 @@ class DocumentCard extends StatelessWidget {
   }
 }
 
-/// Aperçu (fictif) d'un document dans une feuille du bas, avec actions modifier / supprimer
+/// Ouvre la visionneuse du fichier joint
+void openDocumentViewer(BuildContext context, MedicalDocument document) {
+  Navigator.push(context, MaterialPageRoute(builder: (_) => DocumentViewerPage(document: document)));
+}
+
+/// Aperçu d'un document dans une feuille du bas, avec actions ouvrir / modifier / supprimer
 void showDocumentPreview(
   BuildContext context,
   MedicalDocument document, {
@@ -88,7 +95,6 @@ void showDocumentPreview(
   required VoidCallback onDelete,
 }) {
   final category = document.category;
-  final messenger = ScaffoldMessenger.of(context);
 
   showModalBottomSheet<void>(
     context: context,
@@ -136,42 +142,63 @@ void showDocumentPreview(
               _DetailRow(icon: Icons.notes_rounded, label: category.noteLabel, value: document.note!),
             const SizedBox(height: 8),
 
-            // Fichier joint (aperçu fictif)
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
+            // Fichier joint : un appui ouvre la visionneuse
+            Material(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
                 borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    document.fileName == null
-                        ? Icons.insert_drive_file_outlined
-                        : document.fileName!.endsWith('.pdf')
-                            ? Icons.picture_as_pdf_rounded
-                            : Icons.image_rounded,
-                    color: document.fileName == null ? const Color(0xFF94A3B8) : const Color(0xFFDC2626),
-                    size: 32,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          document.fileName ?? 'Aucun document joint',
-                          style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+                onTap: document.hasFile
+                    ? () {
+                        Navigator.pop(sheetContext);
+                        openDocumentViewer(context, document);
+                      }
+                    : null,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Icon(
+                        !document.hasFile
+                            ? Icons.insert_drive_file_outlined
+                            : document.isPdf
+                                ? Icons.picture_as_pdf_rounded
+                                : Icons.image_rounded,
+                        color: !document.hasFile
+                            ? const Color(0xFF94A3B8)
+                            : document.isPdf
+                                ? const Color(0xFFDC2626)
+                                : const Color(0xFF0284C7),
+                        size: 32,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              document.fileName ?? 'Aucun document joint',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              !document.hasFile
+                                  ? 'Aucun fichier n\'a été ajouté'
+                                  : [
+                                      document.isPdf ? 'PDF' : 'Image',
+                                      if (document.fileSize != null) formatFileSize(document.fileSize!),
+                                    ].join(' · '),
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          document.fileName != null ? 'Fichier joint · 245 Ko' : 'Aucun fichier n\'a été ajouté',
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                        ),
-                      ],
-                    ),
+                      ),
+                      if (document.hasFile) const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
             const SizedBox(height: 20),
@@ -214,16 +241,14 @@ void showDocumentPreview(
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: document.fileName == null
+                    onPressed: !document.hasFile
                         ? null
                         : () {
                             Navigator.pop(sheetContext);
-                            messenger.showSnackBar(
-                              const SnackBar(content: Text('Téléchargement indisponible (démo)')),
-                            );
+                            openDocumentViewer(context, document);
                           },
-                    icon: const Icon(Icons.download_rounded, size: 18),
-                    label: const Text('Télécharger'),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    label: const Text('Ouvrir'),
                   ),
                 ),
               ],

@@ -21,7 +21,6 @@ class AddPrescriptionPage extends StatelessWidget {
       titleHint: 'Ex : Traitement hypertension',
       authorHint: 'Ex : Dr. Sarra Ben Ali',
       noteHint: 'Médicaments, posologie, durée du traitement…',
-      demoFileName: 'ordonnance.pdf',
       authorFirst: true,
     );
   }

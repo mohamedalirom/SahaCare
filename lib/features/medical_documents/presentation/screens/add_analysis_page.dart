@@ -31,7 +31,6 @@ class AddAnalysisPage extends StatelessWidget {
       titleOptions: _analysisTypes,
       authorHint: 'Ex : Laboratoire Pasteur',
       noteHint: 'Ex : valeurs normales, à recontrôler dans 3 mois…',
-      demoFileName: 'resultats_analyse.pdf',
     );
   }
 }

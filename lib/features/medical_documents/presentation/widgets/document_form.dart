@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/widgets/custom_button.dart';
+import '../../domain/entities/attached_file.dart';
 import '../../domain/entities/medical_document.dart';
 import '../providers/medical_documents_providers.dart';
 import 'form_widgets.dart';
@@ -18,7 +19,6 @@ class DocumentForm extends ConsumerStatefulWidget {
   final String titleHint;
   final String authorHint;
   final String noteHint;
-  final String demoFileName;
 
   /// Si non null, le titre est choisi dans une liste (ex : types d'analyse)
   final List<String>? titleOptions;
@@ -37,7 +37,6 @@ class DocumentForm extends ConsumerStatefulWidget {
     required this.titleHint,
     required this.authorHint,
     required this.noteHint,
-    required this.demoFileName,
     this.titleOptions,
     this.authorFirst = false,
   });
@@ -53,7 +52,13 @@ class _DocumentFormState extends ConsumerState<DocumentForm> {
   late final _noteController = TextEditingController(text: widget.document?.note);
   late String? _selectedTitle = widget.document?.title;
   late DateTime _date = widget.document?.date ?? DateTime.now();
-  late String? _fileName = widget.document?.fileName;
+
+  /// Nouveau fichier choisi (null = pas de changement)
+  AttachedFile? _newFile;
+
+  /// Le fichier déjà joint a été retiré
+  bool _removeFile = false;
+  bool _saving = false;
 
   bool get _isEdit => widget.document != null;
 
@@ -65,44 +70,49 @@ class _DocumentFormState extends ConsumerState<DocumentForm> {
     super.dispose();
   }
 
-  void _save() {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _save() async {
+    if (_saving || !_formKey.currentState!.validate()) return;
 
     final title = widget.titleOptions != null ? _selectedTitle! : _titleController.text.trim();
     final author = _authorController.text.trim();
     final note = emptyToNull(_noteController.text);
     final notifier = ref.read(medicalDocumentsProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
 
-    if (_isEdit) {
-      notifier.update(
-        widget.document!.copyWith(
+    setState(() => _saving = true);
+    try {
+      if (_isEdit) {
+        await notifier.edit(
+          widget.document!.copyWith(title: title, author: author, date: _date, note: note, clearNote: note == null),
+          newFile: _newFile,
+          removeFile: _removeFile,
+        );
+      } else {
+        await notifier.add(
+          category: widget.category,
           title: title,
           author: author,
           date: _date,
           note: note,
-          clearNote: note == null,
-          fileName: _fileName,
-          clearFileName: _fileName == null,
-        ),
+          file: _newFile,
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Enregistrement impossible : $error'), backgroundColor: const Color(0xFFDC2626)),
       );
-    } else {
-      notifier.add(
-        category: widget.category,
-        title: title,
-        author: author,
-        date: _date,
-        note: note,
-        fileName: _fileName,
-      );
+      return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       SnackBar(
         content: Text(_isEdit ? 'Modifications enregistrées' : widget.savedMessage),
         backgroundColor: const Color(0xFF16A34A),
       ),
     );
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
 
   List<Widget> _titleField() {
@@ -179,13 +189,24 @@ class _DocumentFormState extends ConsumerState<DocumentForm> {
 
             const FormFieldLabel('Document'),
             DocumentUploadZone(
-              demoFileName: widget.demoFileName,
-              initialFileName: _fileName,
-              onChanged: (fileName) => _fileName = fileName,
+              existing: widget.document,
+              onPicked: (file) {
+                _newFile = file;
+                _removeFile = false;
+              },
+              onRemoved: () {
+                _newFile = null;
+                _removeFile = true;
+              },
             ),
             const SizedBox(height: 28),
 
-            CustomButton(label: 'Enregistrer', icon: Icons.check_rounded, onPressed: _save),
+            CustomButton(
+              label: 'Enregistrer',
+              icon: Icons.check_rounded,
+              isLoading: _saving,
+              onPressed: _saving ? null : _save,
+            ),
           ],
         ),
       ),
