@@ -17,23 +17,30 @@ class CustomButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
+    final theme = Theme.of(context);
+    final indicatorColor = theme.elevatedButtonTheme.style?.foregroundColor?.resolve({WidgetState.disabled}) ?? Colors.white;
 
-    if (icon != null) {
-      return ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 20),
-        label: Text(label),
-      );
-    }
+    final child = isLoading
+        ? SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.4, color: indicatorColor),
+          )
+        : (icon != null
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 20),
+                  const SizedBox(width: 8),
+                  Text(label),
+                ],
+              )
+            : Text(label));
 
     return ElevatedButton(
-      onPressed: onPressed,
-      child: Text(label),
+      onPressed: isLoading ? null : onPressed,
+      child: child,
     );
   }
 }

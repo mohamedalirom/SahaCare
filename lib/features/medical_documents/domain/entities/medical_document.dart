@@ -52,7 +52,8 @@ extension DocumentCategoryExt on DocumentCategory {
 }
 
 /// Document médical (ordonnance, analyse ou rapport).
-/// Stocké en mémoire (voir medical_documents_providers.dart) : aucune persistance pour le moment.
+/// Enregistré dans SQLite (voir medical_document_local_datasource.dart). Le contenu du
+/// fichier joint est stocké à part : l'entité ne porte que son nom, son type et sa taille.
 class MedicalDocument {
   final String id;
   final DocumentCategory category;
@@ -60,7 +61,11 @@ class MedicalDocument {
   final String author; // Médecin ou laboratoire
   final DateTime date;
   final String? note;
+
+  /// Fichier joint (null si aucun)
   final String? fileName;
+  final String? mimeType;
+  final int? fileSize;
 
   const MedicalDocument({
     required this.id,
@@ -70,17 +75,25 @@ class MedicalDocument {
     required this.date,
     this.note,
     this.fileName,
+    this.mimeType,
+    this.fileSize,
   });
 
-  /// [clearNote] / [clearFileName] permettent de remettre ces champs facultatifs à null
+  bool get hasFile => fileName != null;
+  bool get isPdf => mimeType == 'application/pdf';
+  bool get isImage => mimeType?.startsWith('image/') ?? false;
+
+  /// [clearNote] / [clearFile] permettent de remettre ces champs facultatifs à null
   MedicalDocument copyWith({
     String? title,
     String? author,
     DateTime? date,
     String? note,
     String? fileName,
+    String? mimeType,
+    int? fileSize,
     bool clearNote = false,
-    bool clearFileName = false,
+    bool clearFile = false,
   }) {
     return MedicalDocument(
       id: id,
@@ -89,9 +102,14 @@ class MedicalDocument {
       author: author ?? this.author,
       date: date ?? this.date,
       note: clearNote ? null : note ?? this.note,
-      fileName: clearFileName ? null : fileName ?? this.fileName,
+      fileName: clearFile ? null : fileName ?? this.fileName,
+      mimeType: clearFile ? null : mimeType ?? this.mimeType,
+      fileSize: clearFile ? null : fileSize ?? this.fileSize,
     );
   }
+
+  /// Documents de démonstration insérés au premier lancement (sans fichier joint)
+  static List<MedicalDocument> get demoData => [...mockPrescriptions, ...mockAnalyses, ...mockReports];
 
   static final List<MedicalDocument> mockPrescriptions = [
     MedicalDocument(
@@ -101,7 +119,6 @@ class MedicalDocument {
       author: 'Dr. Sarra Ben Ali',
       date: DateTime(2026, 9, 28),
       note: 'Amlodipine 5 mg — 1 comprimé le matin pendant 3 mois.',
-      fileName: 'ordonnance_cardio.pdf',
     ),
     MedicalDocument(
       id: 'p2',
@@ -110,7 +127,6 @@ class MedicalDocument {
       author: 'Dr. Karim Haddad',
       date: DateTime(2026, 8, 14),
       note: 'Amoxicilline 1 g — 2 fois par jour pendant 7 jours.',
-      fileName: 'ordonnance_angine.pdf',
     ),
     MedicalDocument(
       id: 'p3',
@@ -119,7 +135,6 @@ class MedicalDocument {
       author: 'Dr. Leila Mansour',
       date: DateTime(2026, 6, 3),
       note: 'Metformine 850 mg — matin et soir, au cours du repas.',
-      fileName: 'ordonnance_diabete.jpg',
     ),
     MedicalDocument(
       id: 'p4',
@@ -139,7 +154,6 @@ class MedicalDocument {
       author: 'Laboratoire Pasteur',
       date: DateTime(2026, 9, 30),
       note: 'Résultats normaux. Légère carence en vitamine D.',
-      fileName: 'bilan_sanguin.pdf',
     ),
     MedicalDocument(
       id: 'a2',
@@ -148,7 +162,6 @@ class MedicalDocument {
       author: 'Laboratoire BioSanté',
       date: DateTime(2026, 8, 2),
       note: 'HbA1c : 6,4 % — à surveiller.',
-      fileName: 'hba1c.pdf',
     ),
     MedicalDocument(
       id: 'a3',
@@ -157,7 +170,6 @@ class MedicalDocument {
       author: 'Laboratoire Pasteur',
       date: DateTime(2026, 5, 17),
       note: 'Cholestérol LDL : 1,35 g/L.',
-      fileName: 'bilan_lipidique.pdf',
     ),
     MedicalDocument(
       id: 'a4',
@@ -177,7 +189,6 @@ class MedicalDocument {
       author: 'Dr. Sarra Ben Ali',
       date: DateTime(2026, 9, 28),
       note: 'Fonction ventriculaire normale, pas d\'anomalie valvulaire.',
-      fileName: 'echo_cardiaque.pdf',
     ),
     MedicalDocument(
       id: 'r2',
@@ -186,7 +197,6 @@ class MedicalDocument {
       author: 'Dr. Nabil Jaziri',
       date: DateTime(2026, 3, 11),
       note: 'Hospitalisation de 3 jours pour crise d\'asthme sévère. Sortie sous traitement de fond.',
-      fileName: 'hospitalisation.pdf',
     ),
     MedicalDocument(
       id: 'r3',
@@ -195,7 +205,6 @@ class MedicalDocument {
       author: 'Dr. Ines Chaabane',
       date: DateTime(2025, 11, 25),
       note: 'Poumons clairs, pas d\'opacité suspecte.',
-      fileName: 'radio_thorax.jpg',
     ),
   ];
 }

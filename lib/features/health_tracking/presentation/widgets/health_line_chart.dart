@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../domain/entities/health_measurement.dart';
+import 'health_palette.dart';
 
 /// Graphique linéaire de l'évolution d'une mesure de santé.
 /// Pour la tension artérielle, deux courbes : systolique et diastolique.
@@ -60,7 +61,7 @@ class HealthLineChart extends StatelessWidget {
           gridData: FlGridData(
             show: !compact,
             drawVerticalLine: false,
-            getDrawingHorizontalLine: (_) => const FlLine(color: Color(0xFFE2E8F0), strokeWidth: 1),
+            getDrawingHorizontalLine: (_) => FlLine(color: context.healthBorder, strokeWidth: 1),
           ),
           borderData: FlBorderData(show: false),
           titlesData: compact ? const FlTitlesData(show: false) : _titles(origin, maxX),

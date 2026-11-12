@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../domain/entities/doctor.dart';
+import '../controllers/appointments_controller.dart';
+import '../widgets/add_edit_doctor_dialog.dart';
 
-/// Fiche détaillée d'un médecin
-class DoctorDetailScreen extends StatelessWidget {
+/// Fiche détaillée d'un médecin avec options de modification et suppression
+class DoctorDetailScreen extends ConsumerWidget {
   final String doctorId;
   final Doctor? initialDoctor;
 
@@ -13,18 +16,124 @@ class DoctorDetailScreen extends StatelessWidget {
     this.initialDoctor,
   });
 
+  void _confirmDelete(BuildContext context, WidgetRef ref, Doctor doctor) async {
+    final notifier = ref.read(appointmentsNotifierProvider.notifier);
+    final hasAppointments = await notifier.doctorHasAppointments(doctor.id);
+
+    if (!context.mounted) return;
+
+    if (hasAppointments) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Suppression impossible'),
+            ],
+          ),
+          content: Text(
+            'Impossible de supprimer ${doctor.fullName} car des rendez-vous lui sont actuellement associés dans votre carnet.\n\nVeuillez d\'abord annuler ou supprimer ses rendez-vous.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Compris'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Supprimer ce médecin ?'),
+          ],
+        ),
+        content: Text(
+          'Voulez-vous vraiment retirer ${doctor.fullName} de votre annuaire de praticiens ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await notifier.deleteDoctor(doctor.id);
+              if (!context.mounted) return;
+              if (success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${doctor.fullName} supprimé de l\'annuaire.'),
+                    backgroundColor: Colors.black87,
+                  ),
+                );
+                context.pop();
+              }
+            },
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final doctor = initialDoctor ??
-        Doctor.mockDoctors.firstWhere(
-          (d) => d.id == doctorId,
-          orElse: () => Doctor.mockDoctors.first,
-        );
+    final doctor = ref.watch(doctorByIdProvider(doctorId)) ?? initialDoctor;
+
+    if (doctor == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Profil du Médecin')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.person_off_outlined, size: 60, color: Colors.grey),
+              const SizedBox(height: 12),
+              const Text('Médecin introuvable ou supprimé'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => context.pop(),
+                child: const Text('Retour à l\'annuaire'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profil du Médecin'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Modifier les informations du médecin',
+            onPressed: () {
+              AddEditDoctorDialog.show(context, doctor: doctor);
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+            tooltip: 'Supprimer ce médecin',
+            onPressed: () => _confirmDelete(context, ref, doctor),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -112,6 +221,13 @@ class DoctorDetailScreen extends StatelessWidget {
                     iconColor: theme.colorScheme.primary,
                     title: 'Téléphone direct',
                     value: doctor.phone,
+                  ),
+                  const Divider(height: 20, color: Color(0xFFF1F5F9)),
+                  _buildDetailRow(
+                    icon: Icons.email_outlined,
+                    iconColor: const Color(0xFF0284C7),
+                    title: 'E-mail professionnel',
+                    value: doctor.email,
                   ),
                 ],
               ),

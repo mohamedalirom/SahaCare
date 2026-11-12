@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/app_utils.dart';
+import '../../data/services/document_file_picker.dart';
+import '../../domain/entities/attached_file.dart';
+import '../../domain/entities/medical_document.dart';
+import '../providers/medical_documents_providers.dart';
 
 /// Libellé affiché au-dessus d'un champ de formulaire
 class FormFieldLabel extends StatelessWidget {
@@ -87,36 +92,31 @@ class _DatePickerFieldState extends State<DatePickerField> {
   }
 }
 
-/// Zone "Ajouter un document" — sélection simulée, aucun fichier réel n'est lu
-class DocumentUploadZone extends StatefulWidget {
-  /// Nom de fichier fictif affiché lorsqu'on choisit "Importer un PDF"
-  final String demoFileName;
+/// Zone "Ajouter un document" : photo, image de la galerie ou PDF (fichier réel)
+class DocumentUploadZone extends ConsumerStatefulWidget {
+  /// Document en cours de modification (affiche son fichier déjà joint)
+  final MedicalDocument? existing;
 
-  /// Fichier déjà joint (mode modification)
-  final String? initialFileName;
-  final ValueChanged<String?>? onChanged;
+  /// Un nouveau fichier a été choisi
+  final ValueChanged<AttachedFile> onPicked;
 
-  const DocumentUploadZone({
-    super.key,
-    this.demoFileName = 'document.pdf',
-    this.initialFileName,
-    this.onChanged,
-  });
+  /// Le fichier (existant ou nouveau) a été retiré
+  final VoidCallback onRemoved;
+
+  const DocumentUploadZone({super.key, this.existing, required this.onPicked, required this.onRemoved});
 
   @override
-  State<DocumentUploadZone> createState() => _DocumentUploadZoneState();
+  ConsumerState<DocumentUploadZone> createState() => _DocumentUploadZoneState();
 }
 
-class _DocumentUploadZoneState extends State<DocumentUploadZone> {
-  late String? _fileName = widget.initialFileName;
-
-  void _setFileName(String? fileName) {
-    setState(() => _fileName = fileName);
-    widget.onChanged?.call(fileName);
-  }
+class _DocumentUploadZoneState extends ConsumerState<DocumentUploadZone> {
+  AttachedFile? _picked;
+  late bool _keepExisting = widget.existing?.hasFile ?? false;
+  bool _loading = false;
 
   Future<void> _chooseSource() async {
-    final fileName = await showModalBottomSheet<String>(
+    final picker = ref.read(documentFilePickerProvider);
+    final source = await showModalBottomSheet<DocumentSource>(
       context: context,
       showDragHandle: true,
       backgroundColor: Colors.white,
@@ -128,36 +128,80 @@ class _DocumentUploadZoneState extends State<DocumentUploadZone> {
               padding: EdgeInsets.only(bottom: 8),
               child: Text('Ajouter un document', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
-            ListTile(
-              leading: const Icon(Icons.photo_camera_rounded),
-              title: const Text('Prendre une photo'),
-              onTap: () => Navigator.pop(sheetContext, 'photo_document.jpg'),
-            ),
+            if (picker.supportsCamera)
+              ListTile(
+                leading: const Icon(Icons.photo_camera_rounded),
+                title: const Text('Prendre une photo'),
+                onTap: () => Navigator.pop(sheetContext, DocumentSource.camera),
+              ),
             ListTile(
               leading: const Icon(Icons.photo_library_rounded),
               title: const Text('Choisir depuis la galerie'),
-              onTap: () => Navigator.pop(sheetContext, 'image_galerie.jpg'),
+              onTap: () => Navigator.pop(sheetContext, DocumentSource.gallery),
             ),
             ListTile(
               leading: const Icon(Icons.picture_as_pdf_rounded),
               title: const Text('Importer un fichier PDF'),
-              onTap: () => Navigator.pop(sheetContext, widget.demoFileName),
+              onTap: () => Navigator.pop(sheetContext, DocumentSource.pdf),
             ),
             const SizedBox(height: 8),
           ],
         ),
       ),
     );
-    if (fileName != null && mounted) _setFileName(fileName);
+    if (source == null || !mounted) return;
+
+    setState(() => _loading = true);
+    try {
+      final file = await picker.pick(source);
+      if (file != null && mounted) {
+        setState(() {
+          _picked = file;
+          _keepExisting = false;
+        });
+        widget.onPicked(file);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is FileTooLargeException
+          ? error.toString()
+          : 'Impossible d\'ajouter ce fichier. Vérifiez les autorisations de l\'application.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: const Color(0xFFDC2626)),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _remove() {
+    setState(() {
+      _picked = null;
+      _keepExisting = false;
+    });
+    widget.onRemoved();
   }
 
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
 
-    if (_fileName != null) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final existing = widget.existing;
+    final picked = _picked;
+    if (picked != null || (_keepExisting && existing != null)) {
+      final name = picked?.name ?? existing!.fileName!;
+      final size = picked?.size ?? existing!.fileSize;
+      final isPdf = picked != null ? picked.mimeType == 'application/pdf' : existing!.isPdf;
+
       return Container(
-        padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+        padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
@@ -165,34 +209,58 @@ class _DocumentUploadZoneState extends State<DocumentUploadZone> {
         ),
         child: Row(
           children: [
-            Icon(
-              _fileName!.endsWith('.pdf') ? Icons.picture_as_pdf_rounded : Icons.image_rounded,
-              color: const Color(0xFFDC2626),
-              size: 30,
-            ),
+            // Miniature pour une image nouvellement choisie, sinon icône
+            if (picked != null && !isPdf)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(
+                  picked.bytes,
+                  width: 48,
+                  height: 48,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const Icon(Icons.image_rounded, color: Color(0xFF0284C7), size: 30),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  isPdf ? Icons.picture_as_pdf_rounded : Icons.image_rounded,
+                  color: isPdf ? const Color(0xFFDC2626) : const Color(0xFF0284C7),
+                  size: 32,
+                ),
+              ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _fileName!,
+                    name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    _fileName == widget.initialFileName ? 'Fichier joint' : 'Prêt à être ajouté (démo)',
+                    [
+                      picked != null ? 'Prêt à être enregistré' : 'Fichier joint',
+                      if (size != null) formatFileSize(size),
+                    ].join(' · '),
                     style: const TextStyle(fontSize: 12, color: Color(0xFF16A34A)),
                   ),
                 ],
               ),
             ),
             IconButton(
+              tooltip: 'Remplacer',
+              icon: const Icon(Icons.swap_horiz_rounded),
+              onPressed: _chooseSource,
+            ),
+            IconButton(
               tooltip: 'Retirer',
               icon: const Icon(Icons.close_rounded),
-              onPressed: () => _setFileName(null),
+              onPressed: _remove,
             ),
           ],
         ),

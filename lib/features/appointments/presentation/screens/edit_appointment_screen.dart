@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/utils/app_utils.dart';
 import '../../domain/entities/appointment.dart';
+import '../controllers/appointments_controller.dart';
 
 /// Écran de modification d'un rendez-vous existant
-class EditAppointmentScreen extends StatefulWidget {
+class EditAppointmentScreen extends ConsumerStatefulWidget {
   final String appointmentId;
   final Appointment? initialAppointment;
 
@@ -15,10 +17,10 @@ class EditAppointmentScreen extends StatefulWidget {
   });
 
   @override
-  State<EditAppointmentScreen> createState() => _EditAppointmentScreenState();
+  ConsumerState<EditAppointmentScreen> createState() => _EditAppointmentScreenState();
 }
 
-class _EditAppointmentScreenState extends State<EditAppointmentScreen> {
+class _EditAppointmentScreenState extends ConsumerState<EditAppointmentScreen> {
   final _formKey = GlobalKey<FormState>();
 
   late Appointment _appointment;
@@ -36,6 +38,7 @@ class _EditAppointmentScreenState extends State<EditAppointmentScreen> {
   void initState() {
     super.initState();
     _appointment = widget.initialAppointment ??
+        ref.read(appointmentByIdProvider(widget.appointmentId)) ??
         Appointment.mockAppointments.firstWhere(
           (a) => a.id == widget.appointmentId,
           orElse: () => Appointment.mockAppointments.first,
@@ -70,15 +73,29 @@ class _EditAppointmentScreenState extends State<EditAppointmentScreen> {
     }
   }
 
-  void _saveChanges() {
+  Future<void> _saveChanges() async {
     if (_formKey.currentState!.validate()) {
+      final updated = _appointment.copyWith(
+        dateTime: _selectedDate,
+        timeSlot: _selectedSlot,
+        reason: _reasonController.text.trim(),
+        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+        reminder: _selectedReminder,
+        notificationEnabled: _enableNotification,
+      );
+
+      // Mise à jour via Riverpod Controller (Update)
+      await ref.read(appointmentsNotifierProvider.notifier).updateAppointment(updated);
+
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Rendez-vous avec ${_appointment.doctorName} reporté au ${AppUtils.formatDate(_selectedDate)} à $_selectedSlot.'),
           backgroundColor: Theme.of(context).colorScheme.primary,
         ),
       );
-      context.pop();
+      context.pop(updated);
     }
   }
 

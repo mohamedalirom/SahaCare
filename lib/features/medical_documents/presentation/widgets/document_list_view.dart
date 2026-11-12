@@ -50,18 +50,51 @@ class DocumentListView extends ConsumerWidget {
     if (confirmed != true || !context.mounted) return;
 
     final notifier = ref.read(medicalDocumentsProvider.notifier);
-    notifier.delete(document.id);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Document supprimé'),
-        action: SnackBarAction(label: 'Annuler', onPressed: () => notifier.restore(document)),
-      ),
-    );
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final deleted = await notifier.delete(document.id);
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Document supprimé'),
+          action: SnackBarAction(label: 'Annuler', onPressed: () => notifier.restore(deleted)),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Suppression impossible : $error'), backgroundColor: const Color(0xFFDC2626)),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final asyncDocuments = ref.watch(medicalDocumentsProvider);
     final documents = ref.watch(documentsByCategoryProvider(category));
+
+    if (asyncDocuments.hasError && !asyncDocuments.hasValue) {
+      return Scaffold(
+        appBar: AppBar(title: Text(title)),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline_rounded, size: 48, color: Color(0xFFDC2626)),
+                const SizedBox(height: 12),
+                const Text('Impossible de charger vos documents.', textAlign: TextAlign.center),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => ref.invalidate(medicalDocumentsProvider),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Réessayer'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
@@ -76,14 +109,21 @@ class DocumentListView extends ConsumerWidget {
           SectionHeaderCard(
             icon: category.icon,
             title: headerTitle,
-            subtitle: documents.isEmpty
+            subtitle: !asyncDocuments.hasValue
+                ? 'Chargement…'
+                : documents.isEmpty
                 ? 'Aucun document enregistré'
                 : '${documents.length} document${documents.length > 1 ? 's' : ''} enregistré'
                     '${documents.length > 1 ? 's' : ''} · du plus récent au plus ancien',
             color: category.color,
           ),
           const SizedBox(height: 16),
-          if (documents.isEmpty)
+          if (asyncDocuments.isLoading && !asyncDocuments.hasValue)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (documents.isEmpty)
             _EmptyState(category: category, onAdd: () => _openForm(context))
           else
             ...documents.map(

@@ -6,12 +6,16 @@ class DoctorCard extends StatelessWidget {
   final Doctor doctor;
   final VoidCallback onTap;
   final VoidCallback onBookPressed;
+  final VoidCallback? onEditPressed;
+  final VoidCallback? onDeletePressed;
 
   const DoctorCard({
     super.key,
     required this.doctor,
     required this.onTap,
     required this.onBookPressed,
+    this.onEditPressed,
+    this.onDeletePressed,
   });
 
   @override
@@ -59,13 +63,51 @@ class DoctorCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          doctor.fullName,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F172A),
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                doctor.fullName,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                            ),
+                            if (onEditPressed != null || onDeletePressed != null)
+                              PopupMenuButton<String>(
+                                icon: const Icon(Icons.more_vert, size: 20, color: Color(0xFF64748B)),
+                                padding: EdgeInsets.zero,
+                                tooltip: 'Options du médecin',
+                                onSelected: (val) {
+                                  if (val == 'edit') onEditPressed?.call();
+                                  if (val == 'delete') onDeletePressed?.call();
+                                },
+                                itemBuilder: (ctx) => [
+                                  const PopupMenuItem(
+                                    value: 'edit',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.edit_outlined, size: 18),
+                                        SizedBox(width: 8),
+                                        Text('Modifier'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'delete',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                                        SizedBox(width: 8),
+                                        Text('Supprimer', style: TextStyle(color: Colors.red)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
                         ),
                         const SizedBox(height: 3),
                         Text(

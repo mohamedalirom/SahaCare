@@ -102,6 +102,37 @@ extension MeasurementTypeExt on MeasurementType {
   }
 }
 
+/// Bornes de saisie plausibles (rejette les fautes de frappe, pas un critère médical)
+class ValueBounds {
+  final double min;
+  final double max;
+
+  const ValueBounds(this.min, this.max);
+
+  bool contains(double v) => v >= min && v <= max;
+}
+
+extension MeasurementTypeBounds on MeasurementType {
+  /// Bornes de la valeur principale (systolique pour la tension)
+  ValueBounds get bounds {
+    switch (this) {
+      case MeasurementType.weight:
+        return const ValueBounds(2, 350);
+      case MeasurementType.temperature:
+        return const ValueBounds(30, 45);
+      case MeasurementType.bloodPressure:
+        return const ValueBounds(50, 260);
+      case MeasurementType.glycemia:
+        return const ValueBounds(20, 600);
+      case MeasurementType.heartRate:
+        return const ValueBounds(20, 250);
+    }
+  }
+
+  /// Bornes de la valeur secondaire (diastolique), uniquement pour la tension
+  ValueBounds? get secondaryBounds => this == MeasurementType.bloodPressure ? const ValueBounds(30, 160) : null;
+}
+
 /// Moment de la mesure de glycémie
 enum GlycemiaContext {
   fasting, // À jeun
@@ -198,30 +229,54 @@ class HealthMeasurement {
     }
   }
 
+  HealthMeasurement copyWith({
+    String? id,
+    MeasurementType? type,
+    double? value,
+    double? Function()? secondaryValue,
+    GlycemiaContext? Function()? glycemiaContext,
+    DateTime? dateTime,
+    String? note,
+  }) {
+    return HealthMeasurement(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      value: value ?? this.value,
+      secondaryValue: secondaryValue != null ? secondaryValue() : this.secondaryValue,
+      glycemiaContext: glycemiaContext != null ? glycemiaContext() : this.glycemiaContext,
+      dateTime: dateTime ?? this.dateTime,
+      note: note ?? this.note,
+    );
+  }
+
   // ===========================================================================
-  // Données fictives (mock) en attendant l'intégration Supabase
+  // Données de démonstration insérées au premier lancement (par utilisateur)
   // ===========================================================================
 
-  static final List<HealthMeasurement> mockMeasurements = _generateMocks();
-
-  static List<HealthMeasurement> _generateMocks() {
+  /// Génère ~3 mois d'historique (une mesure tous les 3 jours pour chaque type).
+  /// [newId] fournit un identifiant unique pour chaque mesure.
+  static List<HealthMeasurement> demoData(String Function() newId) {
     final now = DateTime.now();
     final list = <HealthMeasurement>[];
-    // Une mesure tous les 3 jours sur ~3 mois pour chaque type
     for (int i = 0; i < 30; i++) {
       final date = DateTime(now.year, now.month, now.day, 8, 30).subtract(Duration(days: i * 3));
       final wave = math.sin(i / 2.5);
       list.addAll([
-        HealthMeasurement(id: 'w$i', type: MeasurementType.weight, value: 64.0 + i * 0.12 + wave * 0.4, dateTime: date),
         HealthMeasurement(
-          id: 't$i',
+          id: newId(),
+          type: MeasurementType.weight,
+          value: double.parse((64.0 + i * 0.12 + wave * 0.4).toStringAsFixed(1)),
+          dateTime: date,
+        ),
+        HealthMeasurement(
+          id: newId(),
           type: MeasurementType.temperature,
-          value: (i == 4 ? 38.2 : 36.7 + wave * 0.3),
+          value: double.parse((i == 4 ? 38.2 : 36.7 + wave * 0.3).toStringAsFixed(1)),
           dateTime: date.add(const Duration(hours: 1)),
           note: i == 4 ? 'Fièvre légère, état grippal' : '',
         ),
         HealthMeasurement(
-          id: 'bp$i',
+          id: newId(),
           type: MeasurementType.bloodPressure,
           value: (i == 2 ? 142 : 118 + wave * 8).roundToDouble(),
           secondaryValue: (i == 2 ? 91 : 77 + wave * 5).roundToDouble(),
@@ -229,33 +284,20 @@ class HealthMeasurement {
           note: i == 2 ? 'Mesurée après une journée stressante' : '',
         ),
         HealthMeasurement(
-          id: 'g$i',
+          id: newId(),
           type: MeasurementType.glycemia,
           value: (i.isEven ? 92 + wave * 10 : 135 + wave * 20).roundToDouble(),
           glycemiaContext: i.isEven ? GlycemiaContext.fasting : GlycemiaContext.afterMeal,
           dateTime: date.add(Duration(hours: i.isEven ? 0 : 5)),
         ),
         HealthMeasurement(
-          id: 'hr$i',
+          id: newId(),
           type: MeasurementType.heartRate,
           value: (72 + wave * 9).roundToDouble(),
           dateTime: date.add(const Duration(hours: 3)),
         ),
       ]);
     }
-    list.sort((a, b) => b.dateTime.compareTo(a.dateTime));
     return list;
-  }
-
-  /// Mesures d'un type donné, de la plus récente à la plus ancienne
-  static List<HealthMeasurement> byType(MeasurementType type) {
-    return mockMeasurements.where((m) => m.type == type).toList();
-  }
-
-  static HealthMeasurement? findById(String id) {
-    for (final m in mockMeasurements) {
-      if (m.id == id) return m;
-    }
-    return null;
   }
 }

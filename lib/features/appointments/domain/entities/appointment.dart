@@ -48,6 +48,7 @@ extension ReminderOptionExt on ReminderOption {
 class Appointment {
   final String id;
   final String doctorId;
+  final String? patientId;
   final String doctorName;
   final String doctorSpecialty;
   final String doctorAddress;
@@ -64,6 +65,7 @@ class Appointment {
   const Appointment({
     required this.id,
     required this.doctorId,
+    this.patientId,
     required this.doctorName,
     required this.doctorSpecialty,
     required this.doctorAddress,
@@ -77,6 +79,42 @@ class Appointment {
     this.notes,
     this.fee = 60.0,
   });
+
+  Appointment copyWith({
+    String? id,
+    String? doctorId,
+    String? patientId,
+    String? doctorName,
+    String? doctorSpecialty,
+    String? doctorAddress,
+    String? doctorPhone,
+    DateTime? dateTime,
+    String? timeSlot,
+    String? reason,
+    AppointmentStatus? status,
+    ReminderOption? reminder,
+    bool? notificationEnabled,
+    String? notes,
+    double? fee,
+  }) {
+    return Appointment(
+      id: id ?? this.id,
+      doctorId: doctorId ?? this.doctorId,
+      patientId: patientId ?? this.patientId,
+      doctorName: doctorName ?? this.doctorName,
+      doctorSpecialty: doctorSpecialty ?? this.doctorSpecialty,
+      doctorAddress: doctorAddress ?? this.doctorAddress,
+      doctorPhone: doctorPhone ?? this.doctorPhone,
+      dateTime: dateTime ?? this.dateTime,
+      timeSlot: timeSlot ?? this.timeSlot,
+      reason: reason ?? this.reason,
+      status: status ?? this.status,
+      reminder: reminder ?? this.reminder,
+      notificationEnabled: notificationEnabled ?? this.notificationEnabled,
+      notes: notes ?? this.notes,
+      fee: fee ?? this.fee,
+    );
+  }
 
   /// Rendez-vous de démonstration
   static List<Appointment> get mockAppointments => [

@@ -67,6 +67,38 @@ class Doctor {
     ],
   });
 
+  Doctor copyWith({
+    String? id,
+    String? fullName,
+    String? specialty,
+    String? hospitalOrClinic,
+    String? address,
+    String? phone,
+    String? email,
+    double? rating,
+    int? reviewsCount,
+    double? consultationFee,
+    String? bio,
+    List<String>? availableDays,
+    List<String>? availableSlots,
+  }) {
+    return Doctor(
+      id: id ?? this.id,
+      fullName: fullName ?? this.fullName,
+      specialty: specialty ?? this.specialty,
+      hospitalOrClinic: hospitalOrClinic ?? this.hospitalOrClinic,
+      address: address ?? this.address,
+      phone: phone ?? this.phone,
+      email: email ?? this.email,
+      rating: rating ?? this.rating,
+      reviewsCount: reviewsCount ?? this.reviewsCount,
+      consultationFee: consultationFee ?? this.consultationFee,
+      bio: bio ?? this.bio,
+      availableDays: availableDays ?? this.availableDays,
+      availableSlots: availableSlots ?? this.availableSlots,
+    );
+  }
+
   static List<Doctor> get mockDoctors => const [
         Doctor(
           id: 'doc-1',

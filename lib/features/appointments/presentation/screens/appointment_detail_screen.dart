@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/utils/app_utils.dart';
 import '../../domain/entities/appointment.dart';
+import '../controllers/appointments_controller.dart';
 import '../widgets/appointment_status_badge.dart';
 
-/// Écran affichant les détails d'un rendez-vous, avec options de modification et d'annulation
-class AppointmentDetailScreen extends StatefulWidget {
+/// Écran affichant les détails d'un rendez-vous, avec options de modification, annulation et suppression
+class AppointmentDetailScreen extends ConsumerStatefulWidget {
   final String appointmentId;
   final Appointment? initialAppointment;
 
@@ -16,29 +18,17 @@ class AppointmentDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<AppointmentDetailScreen> createState() => _AppointmentDetailScreenState();
+  ConsumerState<AppointmentDetailScreen> createState() => _AppointmentDetailScreenState();
 }
 
-class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
-  late Appointment _appointment;
-
-  @override
-  void initState() {
-    super.initState();
-    _appointment = widget.initialAppointment ??
-        Appointment.mockAppointments.firstWhere(
-          (a) => a.id == widget.appointmentId,
-          orElse: () => Appointment.mockAppointments.first,
-        );
-  }
-
-  void _cancelAppointment() {
+class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScreen> {
+  void _cancelAppointment(Appointment appointment) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Annuler ce rendez-vous ?'),
         content: Text(
-          'Voulez-vous vraiment annuler votre consultation avec ${_appointment.doctorName} prévue le ${AppUtils.formatDate(_appointment.dateTime)} ?',
+          'Voulez-vous vraiment annuler votre consultation avec ${appointment.doctorName} prévue le ${AppUtils.formatDate(appointment.dateTime)} ?',
         ),
         actions: [
           TextButton(
@@ -50,26 +40,10 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
               backgroundColor: Colors.redAccent,
               foregroundColor: Colors.white,
             ),
-            onPressed: () {
-              setState(() {
-                _appointment = Appointment(
-                  id: _appointment.id,
-                  doctorId: _appointment.doctorId,
-                  doctorName: _appointment.doctorName,
-                  doctorSpecialty: _appointment.doctorSpecialty,
-                  doctorAddress: _appointment.doctorAddress,
-                  doctorPhone: _appointment.doctorPhone,
-                  dateTime: _appointment.dateTime,
-                  timeSlot: _appointment.timeSlot,
-                  reason: _appointment.reason,
-                  status: AppointmentStatus.cancelled,
-                  reminder: ReminderOption.none,
-                  notificationEnabled: false,
-                  notes: _appointment.notes,
-                  fee: _appointment.fee,
-                );
-              });
+            onPressed: () async {
               Navigator.pop(ctx);
+              await ref.read(appointmentsNotifierProvider.notifier).cancelAppointment(appointment.id);
+              if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Rendez-vous annulé avec succès.'),
@@ -84,10 +58,77 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
     );
   }
 
+  void _deleteAppointment(Appointment appointment) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.delete_forever_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Supprimer définitivement'),
+          ],
+        ),
+        content: Text(
+          'Voulez-vous supprimer définitivement ce rendez-vous avec ${appointment.doctorName} de votre historique ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref.read(appointmentsNotifierProvider.notifier).deleteAppointment(appointment.id);
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Rendez-vous supprimé avec succès.'),
+                  backgroundColor: Colors.black87,
+                ),
+              );
+              context.pop();
+            },
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isUpcoming = _appointment.status == AppointmentStatus.upcoming;
+    final appointment = ref.watch(appointmentByIdProvider(widget.appointmentId)) ??
+        widget.initialAppointment;
+
+    if (appointment == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Détail du Rendez-vous')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline_rounded, size: 60, color: Colors.grey),
+              const SizedBox(height: 12),
+              const Text('Rendez-vous introuvable ou supprimé'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => context.pop(),
+                child: const Text('Retour aux rendez-vous'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final isUpcoming = appointment.status == AppointmentStatus.upcoming;
 
     return Scaffold(
       appBar: AppBar(
@@ -98,9 +139,14 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
               icon: const Icon(Icons.edit_calendar_rounded),
               tooltip: 'Modifier le rendez-vous',
               onPressed: () {
-                context.push('/appointments/${_appointment.id}/edit', extra: _appointment);
+                context.push('/appointments/${appointment.id}/edit', extra: appointment);
               },
             ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+            tooltip: 'Supprimer ce rendez-vous',
+            onPressed: () => _deleteAppointment(appointment),
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -124,9 +170,9 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      AppointmentStatusBadge(status: _appointment.status),
+                      AppointmentStatusBadge(status: appointment.status),
                       Text(
-                        '${_appointment.fee.toInt()} DT',
+                        '${appointment.fee.toInt()} DT',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -139,36 +185,43 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: isUpcoming
-                          ? theme.colorScheme.primary.withValues(alpha: 0.08)
-                          : const Color(0xFFF1F5F9),
+                      color: isUpcoming ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        Column(
-                          children: [
-                            Icon(Icons.calendar_month_rounded, color: theme.colorScheme.primary, size: 28),
-                            const SizedBox(height: 4),
-                            Text(
-                              AppUtils.formatDate(_appointment.dateTime),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                            const Text('Date', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                          ],
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isUpcoming ? theme.colorScheme.primary : Colors.grey.shade400,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.access_time_filled_rounded, color: Colors.white, size: 28),
                         ),
-                        Container(height: 40, width: 1, color: const Color(0xFFCBD5E1)),
-                        Column(
-                          children: [
-                            Icon(Icons.access_time_filled_rounded, color: theme.colorScheme.secondary, size: 28),
-                            const SizedBox(height: 4),
-                            Text(
-                              _appointment.timeSlot,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                            const Text('Heure', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                          ],
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                AppUtils.formatDate(appointment.dateTime),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Heure du rendez-vous : ${appointment.timeSlot}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isUpcoming ? theme.colorScheme.primary : const Color(0xFF64748B),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -178,10 +231,10 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Carte Médecin
+            // Praticien & Cabinet
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -191,19 +244,23 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Informations sur le Praticien',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    'Praticien de Santé',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
+                      CircleAvatar(
+                        radius: 26,
+                        backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.15),
+                        child: Text(
+                          appointment.doctorName.replaceAll('Dr. ', '').substring(0, 1),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
                         ),
-                        child: Icon(Icons.person_pin_rounded, color: theme.colorScheme.primary, size: 28),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -211,29 +268,37 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _appointment.doctorName,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              appointment.doctorName,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F172A),
+                              ),
                             ),
+                            const SizedBox(height: 2),
                             Text(
-                              _appointment.doctorSpecialty,
-                              style: TextStyle(color: theme.colorScheme.secondary, fontSize: 13, fontWeight: FontWeight.w600),
+                              appointment.doctorSpecialty,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF0D9488),
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                  const SizedBox(height: 12),
+                  const Divider(height: 24),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFF64748B)),
-                      const SizedBox(width: 6),
+                      const Icon(Icons.location_on_outlined, size: 18, color: Color(0xFF64748B)),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          _appointment.doctorAddress,
-                          style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                          appointment.doctorAddress,
+                          style: const TextStyle(fontSize: 13, color: Color(0xFF334155)),
                         ),
                       ),
                     ],
@@ -241,11 +306,11 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Icon(Icons.phone_outlined, size: 16, color: Color(0xFF64748B)),
-                      const SizedBox(width: 6),
+                      const Icon(Icons.phone_outlined, size: 18, color: Color(0xFF64748B)),
+                      const SizedBox(width: 8),
                       Text(
-                        _appointment.doctorPhone,
-                        style: const TextStyle(fontSize: 13, color: Color(0xFF475569), fontWeight: FontWeight.w500),
+                        appointment.doctorPhone,
+                        style: const TextStyle(fontSize: 13, color: Color(0xFF334155)),
                       ),
                     ],
                   ),
@@ -254,10 +319,10 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Motif de consultation
+            // Motif et Notes
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -268,23 +333,23 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                 children: [
                   const Text(
                     'Motif de Consultation',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
-                    _appointment.reason,
-                    style: const TextStyle(fontSize: 14, color: Color(0xFF334155), height: 1.4),
+                    appointment.reason,
+                    style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A), height: 1.4),
                   ),
-                  if (_appointment.notes != null && _appointment.notes!.isNotEmpty) ...[
-                    const SizedBox(height: 12),
+                  if (appointment.notes != null && appointment.notes!.isNotEmpty) ...[
+                    const Divider(height: 24),
                     const Text(
-                      'Notes personnelles :',
+                      'Notes personnelles & Consignes',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
-                      _appointment.notes!,
-                      style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                      appointment.notes!,
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.4),
                     ),
                   ],
                 ],
@@ -292,7 +357,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Section Notification & Rappel (Exigence Dali)
+            // Statut de Rappel / Alerte
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -306,14 +371,14 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: _appointment.notificationEnabled
+                      color: appointment.notificationEnabled
                           ? const Color(0xFFFEF3C7)
                           : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      _appointment.notificationEnabled ? Icons.notifications_active_rounded : Icons.notifications_off_outlined,
-                      color: _appointment.notificationEnabled ? const Color(0xFFD97706) : Colors.grey,
+                      appointment.notificationEnabled ? Icons.notifications_active_rounded : Icons.notifications_off_outlined,
+                      color: appointment.notificationEnabled ? const Color(0xFFD97706) : Colors.grey,
                       size: 24,
                     ),
                   ),
@@ -323,12 +388,12 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _appointment.notificationEnabled ? 'Rappel programmé' : 'Aucun rappel actif',
+                          appointment.notificationEnabled ? 'Rappel programmé' : 'Aucun rappel actif',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _appointment.notificationEnabled ? _appointment.reminder.label : 'Notifications désactivées pour ce RDV',
+                          appointment.notificationEnabled ? appointment.reminder.label : 'Notifications désactivées pour ce RDV',
                           style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                         ),
                       ],
@@ -339,13 +404,13 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
             ),
             const SizedBox(height: 28),
 
-            // Boutons d'Action (Modifier / Annuler)
+            // Boutons d'Action (Modifier / Annuler / Supprimer)
             if (isUpcoming) ...[
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    context.push('/appointments/${_appointment.id}/edit', extra: _appointment);
+                    context.push('/appointments/${appointment.id}/edit', extra: appointment);
                   },
                   icon: const Icon(Icons.edit_calendar_rounded),
                   label: const Text('Modifier la date ou l\'heure'),
@@ -355,7 +420,7 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _cancelAppointment,
+                  onPressed: () => _cancelAppointment(appointment),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.redAccent,
                     side: const BorderSide(color: Colors.redAccent),
@@ -366,7 +431,20 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
                   label: const Text('Annuler ce rendez-vous'),
                 ),
               ),
+              const SizedBox(height: 12),
             ],
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: () => _deleteAppointment(appointment),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.red.shade700,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Supprimer définitivement de l\'historique'),
+              ),
+            ),
             const SizedBox(height: 20),
           ],
         ),
