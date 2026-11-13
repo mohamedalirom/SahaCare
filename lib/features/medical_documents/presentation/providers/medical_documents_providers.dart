@@ -7,6 +7,7 @@ import '../../../auth/services/auth_service.dart';
 import '../../data/datasources/medical_document_local_datasource.dart';
 import '../../data/repositories/medical_document_repository_impl.dart';
 import '../../data/services/document_file_picker.dart';
+import '../../data/services/emergency_alert_service.dart';
 import '../../domain/entities/attached_file.dart';
 import '../../domain/entities/emergency_contact.dart';
 import '../../domain/entities/emergency_profile.dart';
@@ -223,6 +224,9 @@ class EmergencyContactsNotifier extends Notifier<List<EmergencyContact>> {
 
 final emergencyContactsProvider =
     NotifierProvider<EmergencyContactsNotifier, List<EmergencyContact>>(EmergencyContactsNotifier.new);
+
+/// Bouton SOS : position + SMS + appel (remplacé par un faux dans les tests)
+final emergencyAlertServiceProvider = Provider<EmergencyAlertService>((ref) => EmergencyAlertService());
 
 /// Contact affiché sur la carte d'urgence et le QR code (null s'il n'y a aucun contact)
 final primaryEmergencyContactProvider = Provider<EmergencyContact?>((ref) {

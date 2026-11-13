@@ -7,6 +7,7 @@ import '../widgets/section_header_card.dart';
 import 'analyses_page.dart';
 import 'emergency_contacts_page.dart';
 import 'emergency_medical_card_page.dart';
+import 'emergency_sos_page.dart';
 import 'medical_qr_page.dart';
 import 'medical_reports_page.dart';
 import 'prescriptions_page.dart';
@@ -86,8 +87,60 @@ class HomeDocumentsPage extends ConsumerWidget {
           _TileGrid(tiles: documentTiles),
           const SizedBox(height: 20),
           const _SectionTitle('Urgence'),
+          const _SosButton(),
+          const SizedBox(height: 12),
           _TileGrid(tiles: emergencyTiles),
         ],
+      ),
+    );
+  }
+}
+
+/// Gros bouton rouge : ouvre l'écran SOS (position envoyée aux contacts d'urgence)
+class _SosButton extends StatelessWidget {
+  const _SosButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFDC2626),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EmergencySosPage())),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: Colors.white,
+                child: Text(
+                  'SOS',
+                  style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.w900, fontSize: 15),
+                ),
+              ),
+              SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bouton d\'urgence',
+                      style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Envoyer ma position à mes contacts d\'urgence',
+                      style: TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.share_location_rounded, color: Colors.white, size: 30),
+            ],
+          ),
+        ),
       ),
     );
   }
